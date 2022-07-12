@@ -1,7 +1,4 @@
-from sklearn.model_selection import GridSearchCV, cross_val_predict, cross_val_score, cross_validate, StratifiedGroupKFold, StratifiedKFold
-from sklearn.utils import shuffle
-from sklearn.metrics import confusion_matrix, cohen_kappa_score, accuracy_score, balanced_accuracy_score, make_scorer
-from imblearn.over_sampling import SMOTE
+from sklearn.model_selection import GridSearchCV, StratifiedGroupKFold
 import pandas as pd
 import numpy as np
 import seaborn as sns
@@ -66,6 +63,8 @@ def create_overlaid_images():
     ax.grid(False)
     fig.tight_layout()
     fig.savefig('GGG.png')
+    fig.clf()
+    plt.close()
 
 def classify_glaucoma(deviation_values):
     return pd.cut(deviation_values, [-20, -0.8, 4.4, 9.5, 15.3, 23.1, 50], right=True, labels=range(6))
@@ -92,22 +91,26 @@ def make_dataset(plot=False):
 
     df_discovery = pd.read_csv(f"./inputs/{DISCOVERY_FILENAME}")
 
-    if plot:
-        fig, ax = plt.subplots()
-        total = df_heyex.slices.value_counts().sum()
-        df_heyex.slices.astype(int).value_counts().plot(kind='pie', autopct=lambda p: '{:.0f}%\n{:.0f}'.format(p, p * total / 100) if p > 5 else '', ylabel='', colormap='Greens')
-        fig.savefig('pie_plot_initial.png')
+    # if plot:
+    #     fig, ax = plt.subplots()
+    #     total = df_heyex.slices.value_counts().sum()
+    #     df_heyex.slices.astype(int).value_counts().plot(kind='pie', autopct=lambda p: '{:.0f}%\n{:.0f}'.format(p, p * total / 100) if p > 5 else '', ylabel='', colormap='Greens')
+    #     fig.savefig('pie_plot_initial.png')
+    #     fig.clf()
+    #     plt.close() 
 
-    # df_discovery = df_discovery[~df_discovery.PIXL2.isin([3, 24, 73])] # get rid of ONH scans!!
-    # df_discovery = df_discovery[~df_discovery.FILENAME.isin(BAD_DICOMS)] # badly located scan
-    # df_discovery = df_discovery[~(df_discovery.PIXL2.eq(49) & df_discovery.PIXL1.eq(768))] # Volumes with 49 slices, but not on 6x6x1.9 mm grid
+    # # df_discovery = df_discovery[~df_discovery.PIXL2.isin([3, 24, 73])] # get rid of ONH scans!!
+    # # df_discovery = df_discovery[~df_discovery.FILENAME.isin(BAD_DICOMS)] # badly located scan
+    # # df_discovery = df_discovery[~(df_discovery.PIXL2.eq(49) & df_discovery.PIXL1.eq(768))] # Volumes with 49 slices, but not on 6x6x1.9 mm grid
 
-    if plot:
-        fig, ax = plt.subplots()
-        filt = df_discovery.OESEQ == 1
-        total = df_discovery[filt].PIXL2.value_counts().sum()
-        df_discovery[filt].PIXL2.astype(int).value_counts().plot(kind='pie', autopct=lambda p: '{:.0f}%\n{:.0f}'.format(p, p * total / 100) if p > 5 else '', ylabel='', colormap='Greens')
-        fig.savefig('pie_plot_final.png')
+    # if plot:
+    #     fig, ax = plt.subplots()
+    #     filt = df_discovery.OESEQ == 1
+    #     total = df_discovery[filt].PIXL2.value_counts().sum()
+    #     df_discovery[filt].PIXL2.astype(int).value_counts().plot(kind='pie', autopct=lambda p: '{:.0f}%\n{:.0f}'.format(p, p * total / 100) if p > 5 else '', ylabel='', colormap='Greens')
+    #     fig.savefig('pie_plot_final.png')
+    #     fig.clf()
+    #     plt.close()
 
     df_discovery = df_discovery[["FILENAME", "OETESTCD"] + FEATURES]
     df_discovery = df_discovery[df_discovery['OETESTCD'].isin(RETINAL_LAYERS)] 
@@ -184,22 +187,30 @@ def make_dataset(plot=False):
         sns.histplot(x=df_merged.index.get_level_values(1))
         ax.set_xlabel('Laterality')
         fig.savefig('histplot_laterality.png', bbox_inches='tight')
+        fig.clf()
+        plt.close()
 
         fig, ax = plt.subplots()
         sns.histplot(data=df_merged, x='Age')
         ax.set_xlabel('Age [yr]')
         fig.savefig('histplot_age.png', bbox_inches='tight')
+        fig.clf()
+        plt.close()
 
         fig, ax = plt.subplots()
         sns.histplot(data=df_merged, y='MD')
         ax.set_ylabel('MD [dB]')
         fig.savefig('histplot_md.png', bbox_inches='tight')
+        fig.clf()
+        plt.close()
 
         fig, ax = plt.subplots()
         sns.scatterplot(data=df_merged, x='Age', y='MD')
         ax.set_xlabel('Age [yr]')
         ax.set_ylabel('MD [dB]')
         fig.savefig('plot_age_md.png', bbox_inches='tight')
+        fig.clf()
+        plt.close()
 
     df_ML = df_merged.drop(['rows', 'columns'], axis=1) # remove "index", put "Patient ID" and "Eye"
     df_ML['GS'] = classify_glaucoma(df_ML['MD'])

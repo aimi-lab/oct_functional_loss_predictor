@@ -94,6 +94,8 @@ def _plot_etdrs_grids(pd_serie, save_dir):
     cb.dividers.set_linewidth(LW)
 
     fig.savefig(os.path.join(save_dir, 'etdrs_grid_importance.png'), bbox_inches='tight')
+    fig.clf()
+    plt.close()
 
 def plot_feature_importance(X, y, model, cv, save_dir):
 
@@ -135,6 +137,8 @@ def plot_feature_importance(X, y, model, cv, save_dir):
     plt.subplots_adjust(left=0.3)
     plt.tight_layout()
     fig.savefig(os.path.join(save_dir, 'feature_importance.png'))
+    fig.clf()
+    plt.close()
 
 def plot_truth_prediction(df, save_dir, lim=None, text=None):
 
@@ -164,6 +168,8 @@ def plot_truth_prediction(df, save_dir, lim=None, text=None):
     fig.tight_layout()
 
     fig.savefig(os.path.join(save_dir, 'true_predictions_plot_only_test.png'))
+    fig.clf()
+    plt.close()
 
     ############# FULL CV AND TEST ####################
 
@@ -188,6 +194,8 @@ def plot_truth_prediction(df, save_dir, lim=None, text=None):
     fig.tight_layout()
 
     fig.savefig(os.path.join(save_dir, 'true_predictions_plot.png'))
+    fig.clf()
+    plt.close()
 
 def plot_mae_vs_glaucoma_stage(df, save_dir):
     fig, ax = plt.subplots()
@@ -207,6 +215,8 @@ def plot_mae_vs_glaucoma_stage(df, save_dir):
     plt.legend(loc=9, fontsize="x-small") #bbox_to_anchor=(1.05, 1), borderaxespad=0.
 
     fig.savefig(os.path.join(save_dir, 'error_vs_stage_boxplot.png'), bbox_inches='tight')
+    fig.clf()
+    plt.close()
 
 def _plot_confusion_matrix(cm, classes, title, ax, cmap, normalize):
     if normalize:
@@ -250,5 +260,7 @@ def plot_confusion_figure(cm, cm_test, classes, save_dir, text=None,
 
     fig.tight_layout()
     fig.savefig(os.path.join(save_dir, 'confusion_matrix.png'))
+    fig.clf()
+    plt.close()
 
     
