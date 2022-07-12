@@ -1,4 +1,3 @@
-from curses.ascii import ctrl
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.linear_model import Lasso
 from sklearn.ensemble import RandomForestRegressor
