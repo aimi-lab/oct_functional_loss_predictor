@@ -121,6 +121,9 @@ def make_dataset(plot=False):
     # reset MultiIndex in columns with list comprehension
     df_discovery.columns = ['_'.join(col[::-1]).strip('_') for col in df_discovery.columns]
 
+    srf_cols = [col for col in df_discovery.columns if "SRF_" in col]
+    df_discovery[srf_cols] = df_discovery[srf_cols].fillna(value=0)
+
     df_octopus = pd.read_csv(os.path.join("inputs", OCTOPUS_FILENAME))
     df_octopus['Examination'] = pd.to_datetime(df_octopus.Examination)
     df_octopus['Date of birth'] = pd.to_datetime(df_octopus['Date of birth'])
