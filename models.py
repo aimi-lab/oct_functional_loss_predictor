@@ -212,10 +212,10 @@ class GSClassifier(AbstractModel):
 
         # For classification, y is glaucoma stage
         # returned features_cv, target_cv, glauc_stage_cv, extras_cv, features_test, target_test, glauc_stage_test, extras_test
-        super().read_data()
+        super().read_data(keep_age, 'GS')
 
         if smote:
-            assert self.model.rf_weights is None, 'Cannot apply SMOTE with RF weights'
+            # assert self.model.rf_weights is None, 'Cannot apply SMOTE with RF weights'
             sm = SMOTE(random_state=myc.RNDM_STATE, k_neighbors=5)
             self.X_cv, self.y_cv = sm.fit_resample(self.X_cv, self.y_cv)
             # how to stratify synythetic data on patient?
