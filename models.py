@@ -6,6 +6,7 @@ import pandas as pd
 import os
 import matplotlib.pyplot as plt
 import seaborn as sns
+import json
 
 import misc
 import constants as myc
@@ -72,9 +73,14 @@ class AbstractModel(ABC):
         ax[2].set_title('Test Dataset')
         fig.tight_layout()
         fig.savefig(os.path.join(self.save_dir, 'dataset_histplot.png'))
+        fig.clf()
+        plt.close()
 
     def set_search_grid(self, **kwargs):
         self.search_grid = kwargs
+        
+        with open(os.path.join(self.save_dir, 'grid_search.json'), 'w') as out_file:
+            out_file.write(json.dumps(self.search_grid))
 
     def run_grid_search(self, scoring):
         return misc.run_grid_search(self.X_cv, self.y_cv, self.model, self.gkf_cv, self.search_grid, scoring)
