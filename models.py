@@ -40,8 +40,13 @@ class AbstractModel(ABC):
         self.scores = None
         self.metrics = None
 
-    def read_data(self, keep_age, target):
+    def read_data(self, keep_age, target, slices_subset=None):
         self.df_cv, self.df_test = misc.read_dataset()
+
+        if slices_subset is not None:
+            self.df_cv = self.df_cv[self.df_cv['slices'] == slices_subset]
+            self.df_test = self.df_test[self.df_test['slices'] == slices_subset]
+
         self.gkf_cv = list(StratifiedGroupKFold().split(
             self.df_cv, 
             self.df_cv['GS'], 
@@ -150,7 +155,6 @@ class Regressor(AbstractModel):
     
         if not isinstance(self.model, RegressionEnhancedRandomForest): 
             plotting_utils.plot_feature_importance(self.X_cv, self.y_cv, self.best_model, myc.CV, self.save_dir)
-
 
 class MDRegressor(Regressor):
     
