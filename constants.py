@@ -40,7 +40,7 @@
 # Elsener & Glauser have two eyes, both 49 slices
 # endregion
 
-RETINAL_LAYERS = ['RNFL', 'GCL+IPL', 'INL+OPL', 'ONL', 'PR+RPE', 'CC+CS', 'SRF', 'PED', 'RT', 'BACKGROUND']
+RETINAL_LAYERS = ['RNFL', 'GCL+IPL', 'INL+OPL', 'ONL', 'PR+RPE', 'CC+CS', 'SRF', 'PED', 'RT']
 
 FEATURES = ["THICKNESS_S6", 
             "THICKNESS_N6", 
