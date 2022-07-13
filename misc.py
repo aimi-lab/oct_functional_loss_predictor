@@ -255,6 +255,13 @@ def augment_features(*dfs, n=200):
 
         layers = random.sample(layers_pool, n_ops + 1) # layers are one more than ops
 
+        # if op is commutative, sort layers as it will have same values but different col_name
+        # if op is not commutative, sort only layers from second
+        if op in ['t', 'p']:
+            layers.sort()
+        else:
+            layers[1:] = sorted(layers[1:])
+
         for sector in sector_pool:
             for df in dfs:
                 start_layer = True
