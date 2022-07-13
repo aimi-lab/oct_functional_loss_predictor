@@ -18,7 +18,7 @@ sns.set_context('poster')
 
 class AbstractModel(ABC):
 
-    def __init__(self, save_dir, model) -> None:
+    def __init__(self, save_dir, model, feature_augmentation) -> None:
         self.save_dir = misc.create_dir_if_not_exist(save_dir)
         self.model = model
 
@@ -40,7 +40,9 @@ class AbstractModel(ABC):
         self.scores = None
         self.metrics = None
 
-    def read_data(self, keep_age, target, slices_subset=None):
+        self.feature_augmentation = feature_augmentation
+
+    def read_data(self, keep_age, target, slices_subset=None, adim_layers=False):
         self.df_cv, self.df_test = misc.read_dataset()
 
         if slices_subset is not None:
@@ -53,13 +55,22 @@ class AbstractModel(ABC):
             groups=self.df_cv.index.get_level_values(0)
             ))
 
-        regex = 'THICKNESS|VOLUME'
-        if keep_age: regex += '|Age'
+        if self.feature_augmentation:
+            regex = 'THICKNESS'
+        else:
+            regex = 'THICKNESS|VOLUME'
+            if keep_age: regex += '|Age'
 
         self.X_cv = self.df_cv.filter(regex=regex)
         self.X_test = self.df_test.filter(regex=regex)
         self.y_cv = self.df_cv[target]
         self.y_test = self.df_test[target]
+
+        if adim_layers:
+            pass
+
+        if self.feature_augmentation:
+            self.X_cv, self.X_test = misc.augment_features(self.X_cv, self.X_test)
 
         df_full = pd.concat([self.df_test, self.df_cv])
         print(f"Unique patients identified: {len(df_full.index.get_level_values(0).unique())}")
@@ -96,6 +107,9 @@ class AbstractModel(ABC):
             raise AttributeError('Set grid search first!')
 
         self.best_model = self.run_grid_search(scoring)
+
+        if self.feature_augmentation: return
+
         self.y_cv_pred = cross_val_predict(self.best_model, self.X_cv, self.y_cv, cv=self.gkf_cv)
         self.scores = cross_validate(self.best_model, self.X_cv, self.y_cv, cv=self.gkf_cv, scoring=self.metrics)
 
@@ -104,63 +118,65 @@ class AbstractModel(ABC):
 
 class Regressor(AbstractModel):
 
-    def __init__(self, save_dir, model) -> None:
-        super().__init__(save_dir, model)
+    def __init__(self, save_dir, model, feature_augmentation=False) -> None:
+        super().__init__(save_dir, model, feature_augmentation)
         self.metrics = ['neg_mean_absolute_error', 'r2']
 
     def run(self, scoring='neg_mean_absolute_error'):
         super().run(scoring)
-        mae_test = mean_absolute_error(self.y_test, self.y_test_pred)
-        r2_test = r2_score(self.y_test, self.y_test_pred)
-        
-        text = ''
-        best_params = self.best_model.get_params()
-        for k in sorted(self.search_grid.keys()):
-            v = best_params[k]
-            if isinstance(v, str):
-                vv = myc.ERROR_ABBR.get(v, v)
-                text += f'{k}: {vv}\n'
-            elif isinstance(v, int):
-                text += f'{k}: {v:d}\n'
-            elif isinstance(v, float):
-                text += f'{k}: {v:.2f}\n'
-        text += '\n'
-        text += f'MAE$_{{CV}}$: {-self.scores["test_neg_mean_absolute_error"].mean():.2f} $\pm$ {self.scores["test_neg_mean_absolute_error"].std():.2f}\n'
-        text += f'MAE$_{{test}}$: {mae_test:.2f}\n'
-        text += f'$R^2_{{CV}}$: {(self.scores["test_r2"].mean()):.2f} $\pm$ {(self.scores["test_r2"].std()):.2f}\n'
-        text += f'$R^2_{{test}}$: {r2_test:.2f}'
+
+        if not self.feature_augmentation:
+                
+            mae_test = mean_absolute_error(self.y_test, self.y_test_pred)
+            r2_test = r2_score(self.y_test, self.y_test_pred)
+            
+            text = ''
+            best_params = self.best_model.get_params()
+            for k in sorted(self.search_grid.keys()):
+                v = best_params[k]
+                if isinstance(v, str):
+                    vv = myc.ERROR_ABBR.get(v, v)
+                    text += f'{k}: {vv}\n'
+                elif isinstance(v, int):
+                    text += f'{k}: {v:d}\n'
+                elif isinstance(v, float):
+                    text += f'{k}: {v:.2f}\n'
+            text += '\n'
+            text += f'MAE$_{{CV}}$: {-self.scores["test_neg_mean_absolute_error"].mean():.2f} $\pm$ {self.scores["test_neg_mean_absolute_error"].std():.2f}\n'
+            text += f'MAE$_{{test}}$: {mae_test:.2f}\n'
+            text += f'$R^2_{{CV}}$: {(self.scores["test_r2"].mean()):.2f} $\pm$ {(self.scores["test_r2"].std()):.2f}\n'
+            text += f'$R^2_{{test}}$: {r2_test:.2f}'
 
 
-        df_cv = pd.DataFrame({
-            'y': self.y_cv, 
-            'y_pred': self.y_cv_pred, 
-            'dataset': f'{myc.CV}-fold CV', 
-            # 'n_slices': self.df_cv['slices'], 
-            'stage': self.df_cv['GS']})
-        df_test = pd.DataFrame({
-            'y': self.y_test, 
-            'y_pred': self.y_test_pred, 
-            'dataset': 'test', 
-            # 'n_slices': self.df_test['slices'], 
-            'stage': self.df_test['GS']})
-        df_full = pd.concat([df_cv, df_test])
+            df_cv = pd.DataFrame({
+                'y': self.y_cv, 
+                'y_pred': self.y_cv_pred, 
+                'dataset': f'{myc.CV}-fold CV', 
+                # 'n_slices': self.df_cv['slices'], 
+                'stage': self.df_cv['GS']})
+            df_test = pd.DataFrame({
+                'y': self.y_test, 
+                'y_pred': self.y_test_pred, 
+                'dataset': 'test', 
+                # 'n_slices': self.df_test['slices'], 
+                'stage': self.df_test['GS']})
+            df_full = pd.concat([df_cv, df_test])
 
-        plotting_utils.plot_mae_vs_glaucoma_stage(df_full, self.save_dir)
-        plotting_utils.plot_truth_prediction(
-            df_full, self.save_dir, text=text, 
-            lim=[
-                min(self.y_cv.min(), self.y_cv_pred.min(), self.y_test.min(), self.y_test_pred.min()) - 1, 
-                max(self.y_cv.max(), self.y_cv_pred.max(), self.y_test.max(), self.y_test_pred.max()) + 1
-                ])
+            plotting_utils.plot_mae_vs_glaucoma_stage(df_full, self.save_dir)
+            plotting_utils.plot_truth_prediction(
+                df_full, self.save_dir, text=text, 
+                lim=[
+                    min(self.y_cv.min(), self.y_cv_pred.min(), self.y_test.min(), self.y_test_pred.min()) - 1, 
+                    max(self.y_cv.max(), self.y_cv_pred.max(), self.y_test.max(), self.y_test_pred.max()) + 1
+                    ])
     
         if not isinstance(self.model, RegressionEnhancedRandomForest): 
-            plotting_utils.plot_feature_importance(self.X_cv, self.y_cv, self.best_model, myc.CV, self.save_dir)
+            plotting_utils.plot_feature_importance(self.X_cv, self.y_cv, self.best_model, myc.CV, self.save_dir, self.feature_augmentation)
 
 class MDRegressor(Regressor):
     
     def read_data(self, keep_age=False):
         super().read_data(keep_age, 'MD')
-
 
 class MSRegressor(Regressor):
     

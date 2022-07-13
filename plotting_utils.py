@@ -7,6 +7,7 @@ import numpy as np
 import seaborn as sns
 import itertools
 from constants import RETINAL_LAYERS
+from datetime import datetime
 
 np.set_printoptions(precision=2)
 sns.set_context('poster')
@@ -56,6 +57,7 @@ def _plot_etdrs_grids(pd_serie, save_dir):
 
         if i == 'Age': continue
         layer, vol_thick, [sector, rad] = i.split('_')
+        if sector == 'B': continue
 
         t = ANGLE_DICT[sector] # theta values
         r = RADIUS_DICT[rad] # radius values
@@ -97,13 +99,16 @@ def _plot_etdrs_grids(pd_serie, save_dir):
     fig.clf()
     plt.close()
 
-def plot_feature_importance(X, y, model, cv, save_dir):
+def plot_feature_importance(X, y, model, cv, save_dir, feature_augmentation=False):
+
+    n_repeats = 5 if not feature_augmentation else 2
+    head = 20 if not feature_augmentation else 40
 
     cv_model = cross_validate(
         model,
         X,
         y,
-        cv=RepeatedKFold(n_splits=cv, n_repeats=5),
+        cv=RepeatedKFold(n_splits=cv, n_repeats=n_repeats),
         return_estimator=True
         )
     
@@ -123,8 +128,18 @@ def plot_feature_importance(X, y, model, cv, save_dir):
             columns=model.feature_names_in_,
         )     
     
-    meds = abs(coefs.median()).sort_values(ascending=False).head(20)
+    meds = abs(coefs.median()).sort_values(ascending=False).head(head)
     coefs = coefs[meds.index]
+
+    if feature_augmentation:
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+
+        with open(os.path.join(save_dir, timestamp + '_important_features.txt'), 'w') as fp:
+            fp.write('\n'.join(list(meds.index)))
+
+        with open(os.path.join(save_dir, timestamp + '_features.txt'), 'w') as fp:
+            fp.write('\n'.join(model.feature_names_in_))
+        return
 
     _plot_etdrs_grids(meds, save_dir)
 
@@ -147,7 +162,7 @@ def plot_truth_prediction(df, save_dir, lim=None, text=None):
     fig, ax = plt.subplots(figsize=(12, 8))
 
     df_test = df[df.dataset == 'test']
-    sns.scatterplot(data=df_test, x="y", y="y_pred", ax=ax) #, style="n_slices", ax=ax)
+    sns.scatterplot(data=df_test, x="y", y="y_pred", ax=ax, alpha=0.5) #, style="n_slices", ax=ax)
 
     # ax.plot([0, 1], [0, 1], transform=ax.transAxes, ls="--", c="red")
     ax.axline((-100, -100), slope=1., color='red', ls='--')

@@ -5,6 +5,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import os
 import math
+import random
 
 from constants import RNDM_STATE, G_POINTS, G_CLUSTERS, FEATURES, RETINAL_LAYERS
 
@@ -236,6 +237,42 @@ def make_dataset(plot=False):
     df_cv.to_csv(os.path.join(dataset_dir, 'crossval.csv'))
     df_test.to_csv(os.path.join(dataset_dir, 'test.csv'))
     
+def augment_features(*dfs, n=200):
+    
+    sector_pool = [feat for feat in FEATURES if "THICKNESS" in feat]
+    layers_pool = [lay for lay in RETINAL_LAYERS if lay not in ['SRF', 'PED']]
+    target_n_cols = len(dfs[0].columns) + n
+
+    ops = {'p': np.add, 't': np.multiply, 'd': np.divide, 'm': np.subtract}
+
+    while len(dfs[0].columns) < target_n_cols:
+        n_ops = random.randint(1, 5)
+        op = random.choice(list(ops.keys()))
+
+        # limit operations to keep values far from 0 and Inf
+        if op in ['t', 'd']:
+            n_ops = 1
+
+        layers = random.sample(layers_pool, n_ops + 1) # layers are one more than ops
+
+        for sector in sector_pool:
+            for df in dfs:
+                start_layer = True
+                for layer in layers:
+                    if start_layer:
+                        result = df[layer + '_' + sector].values
+                        start_layer = False
+                    else:
+                        result = ops[op](result, df[layer + '_' + sector].values)
+                col_name = op.join(layers) + '_' + sector
+                df[col_name] = result
+                df[col_name] = df[col_name].fillna(0)
+                df[col_name] = df[col_name].replace([np.inf, -np.inf], 1E6)
+
+    cols_dfs = [len(df.columns) for df in dfs]
+    assert len(set(cols_dfs)) == 1, 'Feature augmentation failed'
+    return dfs
+
 
 def run_grid_search(X, y, model, cv_splitter, cv_grid, scoring='neg_mean_absolute_error'):
     
