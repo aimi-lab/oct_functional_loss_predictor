@@ -283,7 +283,7 @@ def augment_features(*dfs, n=200):
 
 def run_grid_search(X, y, model, cv_splitter, cv_grid, scoring='neg_mean_absolute_error'):
     
-    grid_search = GridSearchCV(model, cv_grid, cv=cv_splitter, scoring=scoring, verbose=2) # verbose=3
+    grid_search = GridSearchCV(model, cv_grid, cv=cv_splitter, scoring=scoring, verbose=2, n_jobs=-1) # verbose=3
     grid_search.fit(X, y)
 
     print(f'Best parameters from grid search: {grid_search.best_params_}')
