@@ -31,6 +31,7 @@ class AbstractModel(ABC):
         self.y_test = None
 
         self.gkf_cv = None
+        self.gkf_cv_weights = None
         self.search_grid = None
 
         self.best_model = None
@@ -42,7 +43,7 @@ class AbstractModel(ABC):
 
         self.feature_augmentation = feature_augmentation
 
-    def read_data(self, keep_age, target, slices_subset=None, adim_layers=False):
+    def read_data(self, keep_age, target, slices_subset=None, features_from=None, compute_weights=False):
         self.df_cv, self.df_test = misc.read_dataset()
 
         if slices_subset is not None:
@@ -54,6 +55,11 @@ class AbstractModel(ABC):
             self.df_cv['GS'], 
             groups=self.df_cv.index.get_level_values(0)
             ))
+
+        if compute_weights:
+            weights_dict = (self.df_cv['GS'].count() / self.df_cv['GS'].value_counts()).to_dict()
+            self.gkf_cv_weights = self.df_cv['GS'].map(weights_dict)
+
 
         if self.feature_augmentation:
             regex = 'THICKNESS'
@@ -175,13 +181,14 @@ class Regressor(AbstractModel):
 
 class MDRegressor(Regressor):
     
-    def read_data(self, keep_age=False):
-        super().read_data(keep_age, 'MD')
+    def read_data(self, keep_age=False, features_from=None, compute_weights=False):
+        # FIXME: bring back to None
+        super().read_data(keep_age, 'MD', None, features_from, compute_weights)
 
 class MSRegressor(Regressor):
     
-    def read_data(self, keep_age=False):
-        super().read_data(keep_age, 'MS')
+    def read_data(self, keep_age=False, features_from=None, compute_weights=False):
+        super().read_data(keep_age, 'MS', None, features_from, compute_weights)
 
 
 class MDRegressorClusters(Regressor):
@@ -192,7 +199,7 @@ class MDRegressorClusters(Regressor):
         self.clusters = range(1, 11)
 
     def read_data(self, keep_age=False):
-        super().read_data(keep_age, 'MD')
+        super().read_data(keep_age, 'MD', None, None, False)
         del self.y_cv, self.y_test
 
     def run(self, scoring='neg_mean_absolute_error'):
