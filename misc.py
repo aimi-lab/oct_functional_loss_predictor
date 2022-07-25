@@ -281,9 +281,19 @@ def augment_features(*dfs, n=200):
     return dfs
 
 
-def run_grid_search(X, y, model, cv_splitter, cv_grid, scoring='neg_mean_absolute_error'):
+def run_grid_search(X, y, model, cv_splitter, cv_grid, scoring='neg_mean_absolute_error', sample_weights=None, random=False):
+
+    print('Running Grid Search to optimise ' + scoring)
+    if random:
+        # FIXME: adjust number of random iterations
+        grid_search = RandomizedSearchCV(model, cv_grid, cv=cv_splitter, scoring=scoring, verbose=2, n_jobs=-1, n_iter=100, random_state=RNDM_STATE)
+    else:
+        grid_search = GridSearchCV(model, cv_grid, cv=cv_splitter, scoring=scoring, verbose=2, n_jobs=-1)
     
-    grid_search = GridSearchCV(model, cv_grid, cv=cv_splitter, scoring=scoring, verbose=2, n_jobs=-1) # verbose=3
+    if sample_weights is not None:
+        print(sample_weights) 
+        grid_search.fit(X, y, sample_weight=sample_weights)
+    else:
     grid_search.fit(X, y)
 
     print(f'Best parameters from grid search: {grid_search.best_params_}')

@@ -102,11 +102,11 @@ class AbstractModel(ABC):
         return misc.run_grid_search(self.X_cv, self.y_cv, self.model, self.gkf_cv, self.search_grid, scoring)
 
     @abstractmethod
-    def run(self, scoring='neg_mean_absolute_error'):
+    def run(self, scoring='neg_mean_absolute_error', random=False):
         if self.search_grid is None: 
             raise AttributeError('Set grid search first!')
 
-        self.best_model = self.run_grid_search(scoring)
+        self.best_model = self.run_grid_search(scoring, random)
 
         if self.feature_augmentation: return
 
@@ -122,8 +122,8 @@ class Regressor(AbstractModel):
         super().__init__(save_dir, model, feature_augmentation)
         self.metrics = ['neg_mean_absolute_error', 'r2']
 
-    def run(self, scoring='neg_mean_absolute_error'):
-        super().run(scoring)
+    def run(self, scoring='neg_mean_absolute_error', random=False):
+        super().run(scoring, random)
 
         if not self.feature_augmentation:
                 
