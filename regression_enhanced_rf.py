@@ -6,7 +6,7 @@ from sklearn.utils.estimator_checks import check_estimator
 
 class RegressionEnhancedRandomForest(BaseEstimator, RegressorMixin):
 
-    def __init__(self, alpha=1.0, n_estimators=100, min_samples_leaf=1, max_features='auto', criterion='absolute_error', random_state=None): 
+    def __init__(self, alpha=1.0, n_estimators=100, min_samples_leaf=1, max_features='auto', criterion='squared_error', random_state=None): 
         # had to introduce random_state to pass tests
         self.alpha = alpha
         self.n_estimators = n_estimators
@@ -34,12 +34,12 @@ class RegressionEnhancedRandomForest(BaseEstimator, RegressorMixin):
         self.lasso_.fit(X, y)
         eps = y - self.lasso_.predict(X)
         self.rf_.fit(X, eps)
-
         return self
 
     def predict(self, X):
 
-        check_is_fitted(self)
+        check_is_fitted(self.lasso_)
+        check_is_fitted(self.rf_)
         X = check_array(X)
 
         return self.lasso_.predict(X) + self.rf_.predict(X)
