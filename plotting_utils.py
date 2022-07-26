@@ -6,13 +6,13 @@ import os
 import numpy as np
 import seaborn as sns
 import itertools
-from constants import RETINAL_LAYERS
+from constants import RETINAL_LAYERS, GLAUCOMA_GS_THRESHOLDS
 from datetime import datetime
 
 np.set_printoptions(precision=2)
 sns.set_context('poster')
 
-CMAP = cm.get_cmap('Greens', 5)
+CMAP = cm.get_cmap('Greens', 8)
 # CMAP.set_over('k')
 
 N_MESH = 200
@@ -29,7 +29,7 @@ AXES_COLS_INV = {v: k for k, v in AXES_COLS.items()}
 LW=1
 
 
-def _plot_etdrs_grids(pd_serie, save_dir):
+def _plot_etdrs_grids(pd_serie, save_dir, filename=None, max=None):
 
     # create right number of rows in subplot and map it to dict
     important_layers = set([i.split('_')[0] for i in pd_serie.index])
@@ -40,8 +40,10 @@ def _plot_etdrs_grids(pd_serie, save_dir):
             axes_rows[ll] = ii
             ii += 1
 
-    fig, axs = plt.subplots(ii, 2, figsize=(6, 6*ii/2), subplot_kw=dict(projection="polar"))
-    norm = colors.Normalize(0, pd_serie.max()) 
+    fig, axs = plt.subplots(ii, len(AXES_COLS.keys()), figsize=(6, 6*ii/2), subplot_kw=dict(projection="polar"))
+
+    max_value = max if max is not None else pd_serie.max()
+    norm = colors.Normalize(0, max_value) 
 
     for ax in axs.reshape(-1):
         ax.plot([np.pi/4, np.pi/4], [1, 6], zorder=3, color='k', linewidth=LW)   
@@ -56,8 +58,10 @@ def _plot_etdrs_grids(pd_serie, save_dir):
     for i, v in pd_serie.iteritems():
 
         if i == 'Age': continue
+        if i.endswith('ONH'): continue
         layer, vol_thick, [sector, rad] = i.split('_')
-        if sector == 'B': continue
+        # cannot plot BG yet
+        if sector in ['B', 'O']: continue
 
         t = ANGLE_DICT[sector] # theta values
         r = RADIUS_DICT[rad] # radius values
@@ -95,7 +99,10 @@ def _plot_etdrs_grids(pd_serie, save_dir):
     cb.outline.set_linewidth(LW)
     cb.dividers.set_linewidth(LW)
 
-    fig.savefig(os.path.join(save_dir, 'etdrs_grid_importance.png'), bbox_inches='tight')
+    if filename is None:
+        filename = 'etdrs_grid_importance.png'
+
+    fig.savefig(os.path.join(save_dir, filename), bbox_inches='tight')
     fig.clf()
     plt.close()
 
@@ -109,7 +116,8 @@ def plot_feature_importance(X, y, model, cv, save_dir, feature_augmentation=Fals
         X,
         y,
         cv=RepeatedKFold(n_splits=cv, n_repeats=n_repeats),
-        return_estimator=True
+        return_estimator=True,
+        n_jobs=-1
         )
     
     if hasattr(cv_model['estimator'][0], 'feature_importances_'):
@@ -161,11 +169,24 @@ def plot_truth_prediction(df, save_dir, lim=None, text=None):
 
     fig, ax = plt.subplots(figsize=(12, 8))
 
+    bx = np.arange(-10, 30, 0.1)
+    by = np.searchsorted(GLAUCOMA_GS_THRESHOLDS, bx) % 2
+    ax.fill_between(bx, 0, 1, where=by, color='black', alpha=0.05, transform=ax.get_xaxis_transform())
+    ax.fill_betweenx(bx, 0, 1, where=by, color='black', alpha=0.05, transform=ax.get_yaxis_transform())
+
     df_test = df[df.dataset == 'test']
-    sns.scatterplot(data=df_test, x="y", y="y_pred", ax=ax, alpha=0.5) #, style="n_slices", ax=ax)
+    sns.scatterplot(data=df_test, x="y", y="y_pred", ax=ax, alpha=0.5, color='black') #, style="n_slices", ax=ax)
 
     # ax.plot([0, 1], [0, 1], transform=ax.transAxes, ls="--", c="red")
     ax.axline((-100, -100), slope=1., color='red', ls='--')
+    
+    x = np.linspace(-100, 100, 2)
+    y = np.linspace(-100, 100, 2)
+    error = np.ones(2)
+    error2 = np.ones(2) * 2
+    plt.fill_between(x, y - error, y + error, color='red', alpha=0.15)   
+    plt.fill_between(x, y - error2, y + error2, color='red', alpha=0.15)   
+    
     ax.set_aspect('equal')
 
     _ = plt.ylabel("Predicted MD [dB]")
@@ -278,4 +299,10 @@ def plot_confusion_figure(cm, cm_test, classes, save_dir, text=None,
     fig.clf()
     plt.close()
 
-    
+if __name__ == '__main__':
+
+    bx = np.arange(-10, 30, 0.1)
+    by = np.searchsorted(GLAUCOMA_GS_THRESHOLDS, bx) % 2
+
+    print(bx)
+    print(by)

@@ -41,6 +41,7 @@
 # endregion
 
 RETINAL_LAYERS = ['RNFL', 'GCL+IPL', 'INL+OPL', 'ONL', 'PR+RPE', 'CC+CS', 'SRF', 'PED', 'RT']
+CIRCLE_RETINAL_LAYERS = ['RNFL', 'GCL+IPL', 'INL+OPL', 'ONL', 'PR+RPE', 'CC+CS', 'RT']
 
 FEATURES = ["THICKNESS_S6", 
             "THICKNESS_N6", 
@@ -61,8 +62,10 @@ FEATURES = ["THICKNESS_S6",
             "VOLUME_I3", 
             "VOLUME_T3", 
             "VOLUME_C1",
-            "VOLUME_BG"
+            # "VOLUME_BG" # it is computed over different areas depending on scan size, not possible to keep
             ]
+
+GLAUCOMA_GS_THRESHOLDS = [-20, -0.8, 4.4, 9.5, 15.3, 23.1, 50]
 
 RNDM_STATE = 55
 CV = 5
