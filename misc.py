@@ -1,4 +1,4 @@
-from sklearn.model_selection import GridSearchCV, StratifiedGroupKFold
+from sklearn.model_selection import GridSearchCV, StratifiedGroupKFold, RandomizedSearchCV, validation_curve
 import pandas as pd
 import numpy as np
 import seaborn as sns
@@ -6,8 +6,9 @@ import matplotlib.pyplot as plt
 import os
 import math
 import random
+import glob
 
-from constants import RNDM_STATE, G_POINTS, G_CLUSTERS, FEATURES, RETINAL_LAYERS
+from constants import RNDM_STATE, G_POINTS, G_CLUSTERS, FEATURES, RETINAL_LAYERS, CIRCLE_RETINAL_LAYERS, GLAUCOMA_GS_THRESHOLDS
 
 import warnings
 warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
@@ -23,6 +24,9 @@ CATCHTRIALS_FILENAME = "001_eyesuite_export_catch_trials_cleaned.csv"
 HEYEX_FILENAME = "005_heyex_export_final.csv"
 DISCOVERY_FILENAME = "discovery-export-d97ac189-584b-49af-9c82-2afe9487a61a-2022_07_07_19_59.csv"
 DISCOVERY_FILENAME_CIRCLES = "discovery-export-28fbddce-9467-4fbd-b38d-2191610204dc-2022_07_25_14_26.csv"
+
+OPS = {'p': np.add, 't': np.multiply, 'd': np.divide, 'm': np.subtract}
+
 
 def create_dir_if_not_exist(dir_name, prefix='outputs'):
     
@@ -70,7 +74,7 @@ def create_overlaid_images():
     plt.close()
 
 def classify_glaucoma(deviation_values):
-    return pd.cut(deviation_values, [-20, -0.8, 4.4, 9.5, 15.3, 23.1, 50], right=True, labels=range(6))
+    return pd.cut(deviation_values, GLAUCOMA_GS_THRESHOLDS, right=True, labels=range(6))
 
 def read_dataset():
     
@@ -261,18 +265,34 @@ def make_dataset(plot=False):
     df_test.to_csv(os.path.join(dataset_dir, 'test.csv'))
     df_ML.to_csv(os.path.join(dataset_dir, 'full.csv'))
 
-    
+def _create_feature(df, layers, op, sector):
+    start_layer = True
+    for layer in layers:
+        if start_layer:
+            result = df[layer + '_' + sector].values
+            start_layer = False
+        else:
+            result = OPS[op](result, df[layer + '_' + sector].values)
+    col_name = op.join(layers) + '_' + sector
+    df[col_name] = result
+    df[col_name] = df[col_name].fillna(0)
+    df[col_name] = df[col_name].replace([np.inf, -np.inf], 1E6)
+
+def _detect_operation(layers_str):
+
+    for operation in OPS.keys():
+        if operation in layers_str:
+            return operation
+
 def augment_features(*dfs, n=200):
     
-    sector_pool = [feat for feat in FEATURES if "THICKNESS" in feat]
-    layers_pool = [lay for lay in RETINAL_LAYERS if lay not in ['SRF', 'PED']]
+    sector_pool = [feat for feat in FEATURES if "THICKNESS" in feat] + ["THICKNESS_ONH"]
+    layers_pool = [lay for lay in RETINAL_LAYERS if lay not in ['IRF', 'SRF', 'PED']]
     target_n_cols = len(dfs[0].columns) + n
-
-    ops = {'p': np.add, 't': np.multiply, 'd': np.divide, 'm': np.subtract}
 
     while len(dfs[0].columns) < target_n_cols:
         n_ops = random.randint(1, 5)
-        op = random.choice(list(ops.keys()))
+        op = random.choice(list(OPS.keys()))
 
         # limit operations to keep values far from 0 and Inf
         if op in ['t', 'd']:
@@ -281,7 +301,7 @@ def augment_features(*dfs, n=200):
         layers = random.sample(layers_pool, n_ops + 1) # layers are one more than ops
 
         # if op is commutative, sort layers as it will have same values but different col_name
-        # if op is not commutative, sort only layers from second
+        # if op is not commutative, sort only layers starting from second
         if op in ['t', 'p']:
             layers.sort()
         else:
@@ -289,37 +309,81 @@ def augment_features(*dfs, n=200):
 
         for sector in sector_pool:
             for df in dfs:
-                start_layer = True
-                for layer in layers:
-                    if start_layer:
-                        result = df[layer + '_' + sector].values
-                        start_layer = False
-                    else:
-                        result = ops[op](result, df[layer + '_' + sector].values)
-                col_name = op.join(layers) + '_' + sector
-                df[col_name] = result
-                df[col_name] = df[col_name].fillna(0)
-                df[col_name] = df[col_name].replace([np.inf, -np.inf], 1E6)
+                _create_feature(df, layers, op, sector)
 
     cols_dfs = [len(df.columns) for df in dfs]
     assert len(set(cols_dfs)) == 1, 'Feature augmentation failed'
     return dfs
 
+def create_features(from_file, *dfs):
+
+    print('Creating features read from ' + from_file)
+    delete_cols = list(dfs[0].columns)
+
+    with open(from_file, 'r') as f:
+        features = f.readlines()
+        features = [line.rstrip() for line in features]
+
+    for feature in features:
+        if feature in delete_cols:
+            delete_cols.remove(feature)
+            continue
+
+        layers_str, *sector_list = feature.split('_')
+        op = _detect_operation(layers_str)
+        layers = layers_str.split(op)
+        sector = '_'.join(sector_list)
+
+        for df in dfs:
+            _create_feature(df, layers, op, sector)
+    
+    for df in dfs:
+        df.drop(columns=delete_cols, inplace=True)
+
+    return dfs
+
+def analyse_augmented_features(dir):
+    feat_dict = dict()
+
+    files = glob.glob(os.path.join(dir, '*_important_features.txt'))
+
+    for afile in files:
+        with open(afile, 'r') as f:
+            features = f.readlines()
+            features = [line.rstrip() for line in features]
+
+        for i, feature in enumerate(features):
+
+            layers, *suffix = feature.split('_')
+            
+            # if division, handle reciprocal features, ex: RNFLdGCL is reciprocal as GCLdRNFL
+            if 'd' in layers:
+                layers_list = layers.split('d')
+                layers_list.sort()
+                layers = 'd'.join(layers_list)
+                feature = '_'.join([layers] + suffix)
+
+            feat_dict[feature] = max(feat_dict.get(feature, 0), 40 - i)
+
+    out_list = sorted(feat_dict.keys(), key=lambda x: x[1], reverse=True)[:200]
+
+    with open(os.path.join(dir, '00_important_features.txt'), 'w') as fp:
+        fp.write('\n'.join(out_list))
 
 def run_grid_search(X, y, model, cv_splitter, cv_grid, scoring='neg_mean_absolute_error', sample_weights=None, random=False):
-
+    
     print('Running Grid Search to optimise ' + scoring)
     if random:
         # FIXME: adjust number of random iterations
         grid_search = RandomizedSearchCV(model, cv_grid, cv=cv_splitter, scoring=scoring, verbose=2, n_jobs=-1, n_iter=100, random_state=RNDM_STATE)
     else:
         grid_search = GridSearchCV(model, cv_grid, cv=cv_splitter, scoring=scoring, verbose=2, n_jobs=-1)
-    
+
     if sample_weights is not None:
         print(sample_weights) 
         grid_search.fit(X, y, sample_weight=sample_weights)
     else:
-    grid_search.fit(X, y)
+        grid_search.fit(X, y)
 
     print(f'Best parameters from grid search: {grid_search.best_params_}')
 
@@ -327,23 +391,56 @@ def run_grid_search(X, y, model, cv_splitter, cv_grid, scoring='neg_mean_absolut
 
 if __name__ == '__main__':
 
+    # from plotting_utils import _plot_etdrs_grids
+
+    # dfs = read_dataset()
+    # # df = pd.concat(dfs, ignore_index=False)
+    # df = dfs[1]
+    # df = df.filter(regex='THICKNESS')
+    # col2drop = [col for col in df.columns if col.startswith('RT')]
+    # # print(col2drop)
+    # df = df.drop(col2drop, axis=1)
+    
+    # interesting_cases = [(2436604, 'OD', '2012-01-04'),
+    #     (1925970, 'OD', '2012-07-04'),
+    #     (3360652, 'OS', '2017-01-13'),
+    #     (14648261, 'OS', '2019-07-19'),
+    #     (1083775, 'OS', '2018-02-16'),
+    #     (2095602, 'OD', '2020-11-13')]
+    
+    # for row in df.iterrows():
+    #     if row[0] in interesting_cases:
+    #         _plot_etdrs_grids(row[1], './inputs/etdrs_images', filename='_'.join([str(i) for i in row[0]])+'.png', max=150)
+
+    #####################
+
+    # analyse_augmented_features("/home/davide/Dropbox (ARTORG)/CAS_Final_Project/src/outputs/FEATURE_AUGMENTATION_REGRESSION_MD")
+
+    #####################
+
     make_dataset(plot=True)
 
     #####################
 
     # from sklearn.manifold import TSNE
     # from sklearn.preprocessing import StandardScaler
+    # import umap
 
     # df_full = pd.concat(read_dataset())
 
     # features = df_full.filter(regex='THICKNESS|VOLUME')
     # features_scaled = StandardScaler().fit_transform(features)
     # # features_embedded = TSNE(learning_rate='auto', init='pca', perplexity=50, early_exaggeration=30).fit_transform(features_scaled)
-    # features_embedded = TSNE(perplexity=100, early_exaggeration=70).fit_transform(features_scaled)
+    # tsne_embedding = TSNE(perplexity=100, early_exaggeration=70).fit_transform(features_scaled)
+    # umap_embedding = umap.UMAP().fit_transform(features_scaled)
 
     # fig, ax = plt.subplots()
-    # sns.scatterplot(x=features_embedded[:, 0], y=features_embedded[:, 1], hue=df_full["GS"], ax=ax, palette='Reds')
-    # fig.savefig('TSNE_dataset.png')
+    # sns.scatterplot(x=tsne_embedding[:, 0], y=tsne_embedding[:, 1], hue=df_full["GS"], ax=ax, palette='Spectral')
+    # fig.savefig('TSNE_embedding.png')
+
+    # fig, ax = plt.subplots()
+    # sns.scatterplot(x=umap_embedding[:, 0], y=umap_embedding[:, 1], hue=df_full["GS"], ax=ax, palette='Spectral')
+    # fig.savefig('UMAP_embedding.png')
 
     #####################
 
