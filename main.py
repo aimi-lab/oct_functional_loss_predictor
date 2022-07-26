@@ -61,66 +61,66 @@ def main():
 ############################################
 
 
-    # search_grid = {
-    #     'max_features': [0.25], 
-    #     'min_samples_leaf': [7], 
-    #     'n_estimators': [300], 
-    #     # 'criterion': ['squared_error', 'absolute_error']
-    # }
-
-    # regress = MDRegressor(
-    #     'RF_BEST_FEATURES', 
-    #     RandomForestRegressor(random_state=RNDM_STATE, n_jobs=-1)
-    #     )
-    # regress.read_data(
-    #     keep_age=False, 
-    #     features_from='/home/davide/Dropbox (ARTORG)/CAS_Final_Project/src/outputs/FEATURE_AUGMENTATION_REGRESSION_MD/00_important_features.txt'
-    #     )
-    # regress.set_search_grid(**search_grid)
-    # regress.run()
-
-    # regress = MDRegressor(
-    #     'RF_VANILLA', 
-    #     RandomForestRegressor(random_state=RNDM_STATE, n_jobs=-1)
-    #     )
-    # regress.read_data(
-    #     keep_age=False, 
-    #     )
-    # regress.set_search_grid(**search_grid)
-    # regress.run()
-
-    # regress = MDRegressor(
-    #     'RF_W-AGE', 
-    #     RandomForestRegressor(random_state=RNDM_STATE, n_jobs=-1)
-    #     )
-    # regress.read_data(
-    #     keep_age=True, 
-    #     )
-    # regress.set_search_grid(**search_grid)
-    # regress.run()
-
-############################################
-############################################
-
     search_grid = {
-        'max_depth': [4],
-        'n_estimators': [250],
-        'learning_rate': [0.05],
-        "subsample":[0.75],
-        "colsample_bytree":[0.75],
-        "min_child_weight": [1], 
-        "reg_lambda": [2]       
+        'max_features': [0.2, 0.3, 0.5, 0.7, 0.9, 1.0], 
+        'min_samples_leaf': [1, 3, 5, 7, 9], 
+        'n_estimators': [100, 300, 500], 
+        # 'criterion': ['squared_error', 'absolute_error']
     }
 
-    for _ in range(50):
-        regress = MDRegressor(
-            'FEATURE_AUGMENTATION_XGBOOST', 
-            XGBRegressor(random_state=RNDM_STATE), 
-            feature_augmentation=True
-            )
-        regress.read_data(keep_age=False)
-        regress.set_search_grid(**search_grid)
-        regress.run()
+    regress = MDRegressor(
+        'RF_BEST_FEATURES', 
+        RandomForestRegressor(random_state=RNDM_STATE, n_jobs=-1)
+        )
+    regress.read_data(
+        keep_age=False, 
+        features_from='/home/davide/Dropbox (ARTORG)/CAS_Final_Project/src/outputs/FEATURE_AUGMENTATION_REGRESSION_MD/00_important_features.txt'
+        )
+    regress.set_search_grid(**search_grid)
+    regress.run('r2', random=True)
+
+    regress = MDRegressor(
+        'RF_VANILLA', 
+        RandomForestRegressor(random_state=RNDM_STATE, n_jobs=-1)
+        )
+    regress.read_data(
+        keep_age=False, 
+        )
+    regress.set_search_grid(**search_grid)
+    regress.run('r2', random=True)
+
+    regress = MDRegressor(
+        'RF_W-AGE', 
+        RandomForestRegressor(random_state=RNDM_STATE, n_jobs=-1)
+        )
+    regress.read_data(
+        keep_age=True, 
+        )
+    regress.set_search_grid(**search_grid)
+    regress.run('r2', random=True)
+
+############################################
+############################################
+
+    # search_grid = {
+    #     'max_depth': [4],
+    #     'n_estimators': [250],
+    #     'learning_rate': [0.05],
+    #     "subsample":[0.75],
+    #     "colsample_bytree":[0.75],
+    #     "min_child_weight": [1], 
+    #     "reg_lambda": [2]       
+    # }
+
+    # for _ in range(50):
+    #     regress = MDRegressor(
+    #         'FEATURE_AUGMENTATION_XGBOOST', 
+    #         XGBRegressor(random_state=RNDM_STATE), 
+    #         feature_augmentation=True
+    #         )
+    #     regress.read_data(keep_age=False)
+    #     regress.set_search_grid(**search_grid)
+    #     regress.run()
 
 ############################################
 ############################################
@@ -171,6 +171,28 @@ def main():
     #     # "gamma": [0.1, 0.3, 0.6],
     #     "min_child_weight":[0, 1, 2, 3],
     # }
+
+    # regress = MDRegressor(
+    #     'XGBOOST_ADIM', 
+    #     XGBRegressor(random_state=RNDM_STATE)
+    #     )
+    # regress.read_data(
+    #     keep_age=False,
+    #     # features_from='/home/davide/Dropbox (ARTORG)/CAS_Final_Project/src/outputs/FEATURE_AUGMENTATION_XGBOOST/00_important_features.txt'
+    #     )
+    # regress.set_search_grid(**search_grid)
+    # regress.run("r2", random=True)
+
+    # regress = MDRegressor(
+    #     'XGBOOST_BEST_FEAT', 
+    #     XGBRegressor(random_state=RNDM_STATE)
+    #     )
+    # regress.read_data(
+    #     keep_age=False,
+    #     features_from='/home/davide/Dropbox (ARTORG)/CAS_Final_Project/src/outputs/FEATURE_AUGMENTATION_XGBOOST/00_important_features.txt'
+    #     )
+    # regress.set_search_grid(**search_grid)
+    # regress.run("r2", random=True)
 
     # regress = MDRegressor(
     #     'XGBOOST', 
