@@ -3,6 +3,7 @@ from sklearn.model_selection import GridSearchCV, cross_val_predict, cross_val_s
 from imblearn.over_sampling import SMOTE
 from sklearn.metrics import mean_absolute_error, r2_score, make_scorer, cohen_kappa_score, confusion_matrix, accuracy_score, balanced_accuracy_score
 import pandas as pd
+import numpy as np
 import os
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -42,9 +43,17 @@ class AbstractModel(ABC):
         self.metrics = None
 
         self.feature_augmentation = feature_augmentation
+        self.features_from_file = False
 
     def read_data(self, keep_age, target, slices_subset=None, features_from=None, compute_weights=False):
         self.df_cv, self.df_test = misc.read_dataset()
+
+        # FIXME: removing GS 4 temporarily....
+        # self.df_cv = self.df_cv[self.df_cv['GS'] < 4]
+        # self.df_test = self.df_test[self.df_test['GS'] < 4]
+
+        # FIXME: sub-sample most represented GS
+        # self.df_cv = self.df_cv.groupby('GS').sample(n=self.df_cv['GS'].value_counts().min(), random_state=myc.RNDM_STATE)
 
         if slices_subset is not None:
             self.df_cv = self.df_cv[self.df_cv['slices'] == slices_subset]
@@ -72,8 +81,10 @@ class AbstractModel(ABC):
         self.y_cv = self.df_cv[target]
         self.y_test = self.df_test[target]
 
-        if adim_layers:
-            pass
+        if features_from is not None:
+            assert not self.feature_augmentation, 'Disable random feature augmentation if reading features from file'
+            self.features_from_file = True
+            self.X_cv, self.X_test = misc.create_features(features_from, self.X_cv, self.X_test)
 
         if self.feature_augmentation:
             self.X_cv, self.X_test = misc.augment_features(self.X_cv, self.X_test)
@@ -84,11 +95,12 @@ class AbstractModel(ABC):
         print(f"Number of features: {len(self.X_cv.columns)}")
 
         fig, ax = plt.subplots(1, 3, figsize=[12, 8])
-        sns.histplot(df_full["GS"], bins=[0, 1, 2, 3, 4, 5, 6], ax=ax[0])
-        sns.histplot(self.df_cv["GS"], bins=[0, 1, 2, 3, 4, 5, 6], ax=ax[1])
-        sns.histplot(self.df_test["GS"], bins=[0, 1, 2, 3, 4, 5, 6], ax=ax[2])
+        sns.histplot(df_full["GS"], bins=[0, 1, 2, 3, 4, 5], ax=ax[0])
+        sns.histplot(self.df_cv["GS"], bins=[0, 1, 2, 3, 4, 5], ax=ax[1])
+        sns.histplot(self.df_test["GS"], bins=[0, 1, 2, 3, 4, 5], ax=ax[2])
         for aaxx in ax:
-            aaxx.set_xticks([0, 1, 2, 3, 4, 5])
+            aaxx.set_xticks([0.5, 1.5, 2.5, 3.5, 4.5])
+            aaxx.set_xticklabels(['0', '1', '2', '3', '4'])
             aaxx.set_xlabel('Glaucoma Stage')
         ax[0].set_title('Full Dataset')
         ax[1].set_title('CV Dataset')
@@ -104,8 +116,8 @@ class AbstractModel(ABC):
         with open(os.path.join(self.save_dir, 'grid_search.json'), 'w') as out_file:
             out_file.write(json.dumps(self.search_grid))
 
-    def run_grid_search(self, scoring):
-        return misc.run_grid_search(self.X_cv, self.y_cv, self.model, self.gkf_cv, self.search_grid, scoring)
+    def run_grid_search(self, scoring, random):
+        return misc.run_grid_search(self.X_cv, self.y_cv, self.model, self.gkf_cv, self.search_grid, scoring, sample_weights=self.gkf_cv_weights, random=random)
 
     @abstractmethod
     def run(self, scoring='neg_mean_absolute_error', random=False):
@@ -116,10 +128,17 @@ class AbstractModel(ABC):
 
         if self.feature_augmentation: return
 
-        self.y_cv_pred = cross_val_predict(self.best_model, self.X_cv, self.y_cv, cv=self.gkf_cv)
-        self.scores = cross_validate(self.best_model, self.X_cv, self.y_cv, cv=self.gkf_cv, scoring=self.metrics)
+        self.y_cv_pred = cross_val_predict(self.best_model, self.X_cv, self.y_cv, cv=self.gkf_cv, n_jobs=-1)
+        self.scores = cross_validate(self.best_model, self.X_cv, self.y_cv, cv=self.gkf_cv, scoring=self.metrics, n_jobs=-1)
 
         self.y_test_pred = self.best_model.predict(self.X_test)
+
+        outs = ({
+            'GS': self.df_test['GS'].values,
+            'trues': self.y_test.values,
+            'preds': self.y_test_pred
+            })
+        pd.DataFrame(outs, index=self.y_test.index).to_csv(os.path.join(os.path.join(self.save_dir, 'test_values.csv')))
 
 
 class Regressor(AbstractModel):
@@ -140,13 +159,14 @@ class Regressor(AbstractModel):
             best_params = self.best_model.get_params()
             for k in sorted(self.search_grid.keys()):
                 v = best_params[k]
+                key_str = k.split('__')[-1]
                 if isinstance(v, str):
                     vv = myc.ERROR_ABBR.get(v, v)
-                    text += f'{k}: {vv}\n'
+                    text += f'{key_str}: {vv}\n'
                 elif isinstance(v, int):
-                    text += f'{k}: {v:d}\n'
+                    text += f'{key_str}: {v:d}\n'
                 elif isinstance(v, float):
-                    text += f'{k}: {v:.2f}\n'
+                    text += f'{key_str}: {v:.2f}\n'
             text += '\n'
             text += f'MAE$_{{CV}}$: {-self.scores["test_neg_mean_absolute_error"].mean():.2f} $\pm$ {self.scores["test_neg_mean_absolute_error"].std():.2f}\n'
             text += f'MAE$_{{test}}$: {mae_test:.2f}\n'
@@ -176,7 +196,7 @@ class Regressor(AbstractModel):
                     max(self.y_cv.max(), self.y_cv_pred.max(), self.y_test.max(), self.y_test_pred.max()) + 1
                     ])
     
-        if not isinstance(self.model, RegressionEnhancedRandomForest): 
+        if not isinstance(self.model, RegressionEnhancedRandomForest) and not self.features_from_file: 
             plotting_utils.plot_feature_importance(self.X_cv, self.y_cv, self.best_model, myc.CV, self.save_dir, self.feature_augmentation)
 
 class MDRegressor(Regressor):
@@ -301,4 +321,5 @@ class GSClassifier(AbstractModel):
         #     lim=[min(y_pred.min(), y_cv.min(), y_pred_test.min(), y_test.min()) - 1, max(y_pred.max(), y_cv.max(), y_pred_test.max(), y_test.max()) + 1])
         # fig.savefig(os.path.join(save_dir, 'true_predictions_plot.png'))
 
-        plotting_utils.plot_feature_importance(self.X_cv, self.y_cv, self.best_model, myc.CV, self.save_dir)
+        if not self.features_from_file:
+            plotting_utils.plot_feature_importance(self.X_cv, self.y_cv, self.best_model, myc.CV, self.save_dir)
