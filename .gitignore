@@ -1,5 +1,6 @@
 *.png
 *.pyc
-inputs
+inputs/*
+!inputs/*.sql
 outputs
 logs
