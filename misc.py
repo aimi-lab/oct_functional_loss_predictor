@@ -19,8 +19,10 @@ sns.set_context('paper')
 # https://www.kaggle.com/c/diabetic-retinopathy-detection/overview/evaluation
 
 OCTOPUS_FILENAME = "001_eyesuite_export_onlyG_onlygt59.csv"
+CATCHTRIALS_FILENAME = "001_eyesuite_export_catch_trials_cleaned.csv"
 HEYEX_FILENAME = "005_heyex_export_final.csv"
 DISCOVERY_FILENAME = "discovery-export-d97ac189-584b-49af-9c82-2afe9487a61a-2022_07_07_19_59.csv"
+DISCOVERY_FILENAME_CIRCLES = "discovery-export-28fbddce-9467-4fbd-b38d-2191610204dc-2022_07_25_14_26.csv"
 
 def create_dir_if_not_exist(dir_name, prefix='outputs'):
     
@@ -80,6 +82,8 @@ def read_dataset():
     
 def make_dataset(plot=False):
 
+    ################### HEYEX ###########################
+
     # df_heyex = pd.read_excel("./inputs/20211206_perimetry_dicom_export_Serife.xlsx")
     df_heyex = pd.read_csv(f"./inputs/{HEYEX_FILENAME}")
     # df_heyex['patient_id'] = df_heyex['patient_id'].fillna(method='ffill').astype(int)
@@ -90,40 +94,47 @@ def make_dataset(plot=False):
     df_heyex = df_heyex[['patient_id', 'image_laterality', 'oct_date', 'rows', 'columns', 'slices']]
     df_heyex['patient_id'] = df_heyex['patient_id'].astype(str).str.lstrip('0')
 
+    ################### DISCOVERY ###########################
+
     df_discovery = pd.read_csv(f"./inputs/{DISCOVERY_FILENAME}")
 
-    # if plot:
-    #     fig, ax = plt.subplots()
-    #     total = df_heyex.slices.value_counts().sum()
-    #     df_heyex.slices.astype(int).value_counts().plot(kind='pie', autopct=lambda p: '{:.0f}%\n{:.0f}'.format(p, p * total / 100) if p > 5 else '', ylabel='', colormap='Greens')
-    #     fig.savefig('pie_plot_initial.png')
-    #     fig.clf()
-    #     plt.close() 
-
-    # # df_discovery = df_discovery[~df_discovery.PIXL2.isin([3, 24, 73])] # get rid of ONH scans!!
-    # # df_discovery = df_discovery[~df_discovery.FILENAME.isin(BAD_DICOMS)] # badly located scan
-    # # df_discovery = df_discovery[~(df_discovery.PIXL2.eq(49) & df_discovery.PIXL1.eq(768))] # Volumes with 49 slices, but not on 6x6x1.9 mm grid
-
-    # if plot:
-    #     fig, ax = plt.subplots()
-    #     filt = df_discovery.OESEQ == 1
-    #     total = df_discovery[filt].PIXL2.value_counts().sum()
-    #     df_discovery[filt].PIXL2.astype(int).value_counts().plot(kind='pie', autopct=lambda p: '{:.0f}%\n{:.0f}'.format(p, p * total / 100) if p > 5 else '', ylabel='', colormap='Greens')
-    #     fig.savefig('pie_plot_final.png')
-    #     fig.clf()
-    #     plt.close()
-
-    df_discovery = df_discovery[["FILENAME", "OETESTCD"] + FEATURES]
+    index_list = ["FILENAME", "STUDYID", "USUBJID", "FOCID", "OEDTC", "OETESTCD"]
+    df_discovery = df_discovery[index_list + FEATURES]
     df_discovery = df_discovery[df_discovery['OETESTCD'].isin(RETINAL_LAYERS)] 
 
     df_discovery.drop_duplicates(['FILENAME', 'OETESTCD'], keep='first', inplace=True) # export yielded undexpected duplicates
-    df_discovery = df_discovery.set_index(['FILENAME', 'OETESTCD']).unstack()
+    df_discovery = df_discovery.set_index(index_list).unstack()
     df_discovery.columns.names = (None, None)
     # reset MultiIndex in columns with list comprehension
     df_discovery.columns = ['_'.join(col[::-1]).strip('_') for col in df_discovery.columns]
 
     srf_cols = [col for col in df_discovery.columns if "SRF_" in col]
     df_discovery[srf_cols] = df_discovery[srf_cols].fillna(value=0)
+
+    df_discovery['FILENAME'] = df_discovery.index.get_level_values(0)
+    df_discovery = df_discovery.droplevel(0)
+
+    ################## DISCOVERY CIRCLES ######################
+
+    df_circles = pd.read_csv(f"./inputs/{DISCOVERY_FILENAME_CIRCLES}")
+
+    df_circles = df_circles[index_list + ["THICKNESS_BG"]]
+    df_circles = df_circles.rename(columns={'THICKNESS_BG': 'THICKNESS_ONH'})
+    df_circles = df_circles[df_circles['OETESTCD'].isin(CIRCLE_RETINAL_LAYERS)] 
+
+    df_circles.drop_duplicates(['FILENAME', 'OETESTCD'], keep='first', inplace=True) # export yielded undexpected duplicates
+    df_circles = df_circles.set_index(index_list).unstack()
+    df_circles.columns.names = (None, None)
+    # reset MultiIndex in columns with list comprehension
+    df_circles.columns = ['_'.join(col[::-1]).strip('_') for col in df_circles.columns]
+    df_circles = df_circles.droplevel(0)
+
+    df_discovery = df_discovery.merge(df_circles, left_index=True, right_index=True, how='inner', validate='one_to_one')
+    df_discovery = df_discovery.set_index("FILENAME")
+
+    df_discovery = df_discovery[df_discovery['RNFL_THICKNESS_ONH'] > 50]
+
+    ################### EYESUITE ###########################
 
     df_octopus = pd.read_csv(os.path.join("inputs", OCTOPUS_FILENAME))
     df_octopus['Examination'] = pd.to_datetime(df_octopus.Examination)
@@ -134,8 +145,20 @@ def make_dataset(plot=False):
     df_octopus.drop_duplicates(['Patient ID', 'Eye', 'vf_date'], inplace=True, keep='first')
     df_octopus['Patient ID'] = df_octopus['Patient ID'].astype(str).str.lstrip('0')
 
+    df_catchtrials = pd.read_csv(os.path.join("inputs", CATCHTRIALS_FILENAME))
+    df_catchtrials['Examination'] = pd.to_datetime(df_catchtrials.Examination)
+    df_catchtrials['vf_date'] = df_catchtrials.Examination.dt.date
+    df_catchtrials = df_catchtrials.sort_values('Examination', ascending=False)
+    df_catchtrials.drop_duplicates(['Patient ID', 'Eye', 'vf_date'], inplace=True, keep='first')
+    df_catchtrials['Patient ID'] = df_catchtrials['Patient ID'].astype(str).str.lstrip('0')
+    df_catchtrials = df_catchtrials[['Patient ID', 'Eye', 'vf_date', '{FALSEPOSITIFCATCHTRIAL}']]
+    df_octopus = df_octopus.merge(df_catchtrials, on=['Patient ID', 'Eye', 'vf_date'], validate='one_to_one', how='left')
+
     # drop non-valid exams
-    df_octopus = df_octopus[df_octopus[' {FALSENEGATIFCATCHTRIAL}'] < 0.2 * df_octopus['{NEGATIFCATCHTRIAL}']]
+    df_octopus = df_octopus[df_octopus['Age'] >= 40]
+    df_octopus = df_octopus[df_octopus['Age'] <= 95]
+    df_octopus = df_octopus[df_octopus['{FALSENEGATIFCATCHTRIAL}'] < 0.15 * df_octopus['{NEGATIFCATCHTRIAL}']]
+    df_octopus = df_octopus[df_octopus['{FALSEPOSITIFCATCHTRIAL}'] < 0.15 * df_octopus['{POSITIFCATCHTRIAL}']]
 
     ## EXTRACT CLUSTERS ##
 
@@ -195,7 +218,7 @@ def make_dataset(plot=False):
         plt.close()
 
         fig, ax = plt.subplots()
-        sns.histplot(data=df_merged, x='Age')
+        sns.histplot(data=df_merged, x='Age', bins=range(40, 101))
         ax.set_xlabel('Age [yr]')
         fig.savefig('histplot_age.png', bbox_inches='tight')
         fig.clf()
@@ -236,6 +259,8 @@ def make_dataset(plot=False):
 
     df_cv.to_csv(os.path.join(dataset_dir, 'crossval.csv'))
     df_test.to_csv(os.path.join(dataset_dir, 'test.csv'))
+    df_ML.to_csv(os.path.join(dataset_dir, 'full.csv'))
+
     
 def augment_features(*dfs, n=200):
     
