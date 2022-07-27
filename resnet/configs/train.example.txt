@@ -1,0 +1,14 @@
+--batch-size
+8
+--epochs
+50
+--learning-rate
+0.01
+--writing-per-epoch
+10
+--model-name
+resnet50
+--resize
+512
+--target
+MD
