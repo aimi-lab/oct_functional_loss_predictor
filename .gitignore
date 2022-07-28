@@ -1,5 +1,6 @@
 *.png
 *.pyc
+*.jpeg
 inputs/*
 !inputs/*.sql
 outputs

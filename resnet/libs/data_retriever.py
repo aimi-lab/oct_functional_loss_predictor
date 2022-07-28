@@ -33,10 +33,10 @@ class OCTDataset(Dataset):
     """OCT dataset"""
     DIR_DATAFILES = Path(__file__).parent.parent.parent.joinpath("inputs", "dataset")
     DIR_ONH_IMGS = Path(__file__).parent.parent.parent.joinpath("inputs", "onh_images")
-    DIR_PROJ_IMGS = Path(__file__).parent.parent.parent.joinpath("inputs", "projections")
+    DIR_THICK_IMGS = Path(__file__).parent.parent.parent.joinpath("inputs", "thicknesses")
 
     ID2ONH_JSON = Path(__file__).parent.parent.parent.joinpath("inputs", "dataset", "idx_to_onh.json")
-    ID2PROJ_JSON = Path(__file__).parent.parent.parent.joinpath("inputs", "dataset", "idx_to_projections.json")
+    ID2THICK_JSON = Path(__file__).parent.parent.parent.joinpath("inputs", "dataset", "idx_to_thicknesses.json")
 
     def __init__(self, csv_name, target='MD', transform_image=None):
 
@@ -57,14 +57,36 @@ class OCTDataset(Dataset):
         with open(OCTDataset.ID2ONH_JSON, "r") as infile:
             self.idx2onh_dict = json.load(infile)
 
-        with open(OCTDataset.ID2PROJ_JSON, "r") as infile:
-            self.idx2proj_dict = json.load(infile)
+        with open(OCTDataset.ID2THICK_JSON, "r") as infile:
+            self.idx2thick_dict = json.load(infile)
 
         self.augment_image = csv_name == 'crossval.csv'
         self.transform_image = transform_image
 
         # self.weights = self._get_weights_loss()
         # self.posweights = self._get_posweights()
+
+    @staticmethod
+    def rgba2rgb(rgba, background=(0,0,0)):
+        row, col, ch = rgba.shape
+
+        if ch == 3:
+            return rgba
+
+        assert ch == 4, 'RGBA image has 4 channels.'
+
+        rgb = np.zeros( (row, col, 3), dtype='float32' )
+        r, g, b, a = rgba[:,:,0], rgba[:,:,1], rgba[:,:,2], rgba[:,:,3]
+
+        a = np.asarray( a, dtype='float32' ) / 255.0
+
+        R, G, B = background
+
+        rgb[:,:,0] = r * a + (1.0 - a) * R
+        rgb[:,:,1] = g * a + (1.0 - a) * G
+        rgb[:,:,2] = b * a + (1.0 - a) * B
+
+        return np.asarray( rgb, dtype='uint8' )
 
     def __len__(self):
         return self.dataset_len
@@ -77,18 +99,19 @@ class OCTDataset(Dataset):
         exam_id = self.index_set[idx]
 
         # FIXME: ONH images need to be mirrored?
-        image_onh = io.imread(OCTDataset.DIR_ONH_IMGS.joinpath(self.idx2onh_dict[exam_id], '0.jpeg'))
+        # image_onh = io.imread(OCTDataset.DIR_ONH_IMGS.joinpath(self.idx2onh_dict[exam_id], '0.jpeg'))
 
         # if self.augment_image and random.random() > 0.5:
         #     image_onh = np.fliplr(image_onh)
 
         proj_images = []
-        for img_name in [f'{no}.png' for no in list(range(7)) + [10]]:
-            image_proj = io.imread(OCTDataset.DIR_PROJ_IMGS.joinpath(self.idx2proj_dict[exam_id], img_name))
+        for img_name in [f'{no}.png' for no in list(range(1, 7)) + [10]]:
+            image_thick = io.imread(OCTDataset.DIR_THICK_IMGS.joinpath(self.idx2thick_dict[exam_id], img_name))
+            image_thick = OCTDataset.rgba2rgb(image_thick)
             if exam_id.split('_')[1] == 'OD':
-                image_proj = image_proj[:, ::-1]
-            # print(image_proj.max())
-            proj_images.append(image_proj[::-1, :])
+                image_thick = image_thick[:, ::-1, :]
+            # print(image_thick.max())
+            proj_images.append(image_thick[::-1, :, :])
 
         # if self.augment_image and random.random() > 0.5:
         #     proj_images = [np.fliplr(img) for img in proj_images]
@@ -100,12 +123,14 @@ class OCTDataset(Dataset):
 
         # proj_images = [tensor_transform(img) for img in proj_images]
 
-        image0 = np.concatenate(proj_images[:4], axis=0) / 255
-        image1 = np.concatenate(proj_images[4:], axis=0) / 255
-        image2 = image_onh / 255
+        image0 = np.concatenate([img[:, :, 0] for img in proj_images], axis=0) / 255
+        image1 = np.concatenate([img[:, :, 1] for img in proj_images], axis=0) / 255
+        image2 = np.concatenate([img[:, :, 2] for img in proj_images], axis=0) / 255
+        # image1 = np.concatenate(proj_images[4:], axis=0) / 255
+        # image2 = image_onh / 255
 
-        image0 = skimage.transform.resize(image0, image2.shape)
-        image1 = skimage.transform.resize(image1, image2.shape)
+        # image0 = skimage.transform.resize(image0, image2.shape)
+        # image1 = skimage.transform.resize(image1, image2.shape)
 
         image = np.stack([image0, image1, image2], axis=-1)
 
@@ -138,9 +163,9 @@ class OCTDataset(Dataset):
         # print(sample['images'][:, :, 1].shape)
         # print(sample['images'][:, :, 2].shape)
 
-        axs['im0'].imshow(sample['images'][0, :, :] * 0.5 + 0.5, cmap='gray')
-        axs['im1'].imshow(sample['images'][1, :, :] * 0.5 + 0.5, cmap='gray')
-        axs['im2'].imshow(sample['images'][2, :, :] * 0.5 + 0.5, cmap='gray')
+        axs['im0'].imshow(sample['images'][:, :, 0] * 0.5 + 0.5, cmap='gray')
+        axs['im1'].imshow(sample['images'][:, :, 1] * 0.5 + 0.5, cmap='gray')
+        axs['im2'].imshow(sample['images'][:, :, 2] * 0.5 + 0.5, cmap='gray')
         # print(f'{sample["uuids"]}\n{sample["values"]:.1f} dB')
 
         text = f'UUID = {sample["uuids"]}\nMD = {sample["values"]:.1f} dB' #+ '\n' + ''.join([f'{sample["images"][i, :, :].shape} ' for i in range(3)])
