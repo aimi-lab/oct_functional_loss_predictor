@@ -11,7 +11,7 @@
 # Job name
 #SBATCH --job-name="perimetry"
 # Partition
-#SBATCH --partition=epyc2 # all, gpu, phi, long, gpu-invest
+#SBATCH --partition=bdw # all, gpu, phi, long, gpu-invest
 
 # Runtime and memory
 #SBATCH --time=12:00:00    # days-HH:MM:SS
@@ -19,7 +19,7 @@
 # total RAM is mem-per-cpu * cpus-per-task
 
 # maximum cores is 20 on all, 10 on long, 24 on gpu, 64 on phi!
-#SBATCH --cpus-per-task=8
+#SBATCH --cpus-per-task=20
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 ##SBATCH --ntasks-per-node=1

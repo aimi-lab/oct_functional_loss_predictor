@@ -13,9 +13,6 @@ from collections import OrderedDict
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import pathlib
-import seaborn as sns
-
-sns.set_style('white')
 
 # from pytorch_grad_cam import GradCAM
 # from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
@@ -112,8 +109,8 @@ def calculate_metrics(y_true, y_pred):
     if type(y_pred) == list:
         y_pred = np.concatenate(y_pred, axis=0)
 
-    mae = metrics.mean_absolute_error()
-    r2 = metrics.r2_score()
+    mae = metrics.mean_absolute_error(y_true, y_pred)
+    r2 = metrics.r2_score(y_true, y_pred)
 
     dict_metrics = {'R2': r2, 'MAE': mae}
 
@@ -472,7 +469,10 @@ def compute_contrast(image_dir: pathlib.Path) -> None:
 
 def plot_truth_prediction(y_true, y_pred):
 
-    ############## ONLY TEST ########################
+    if type(y_true) == list:
+        y_true = np.concatenate(y_true, axis=0)
+    if type(y_pred) == list:
+        y_pred = np.concatenate(y_pred, axis=0)
 
     fig, ax = plt.subplots(figsize=(12, 8))
 
@@ -481,7 +481,7 @@ def plot_truth_prediction(y_true, y_pred):
     # ax.fill_between(bx, 0, 1, where=by, color='black', alpha=0.05, transform=ax.get_xaxis_transform())
     # ax.fill_betweenx(bx, 0, 1, where=by, color='black', alpha=0.05, transform=ax.get_yaxis_transform())
 
-    sns.scatterplot(x=y_pred, y=y_true, ax=ax, alpha=0.5, color='black') #, style="n_slices", ax=ax)
+    ax.scatter(y_true, y_pred, alpha=0.5, color='black') #, style="n_slices", ax=ax)
 
     # ax.plot([0, 1], [0, 1], transform=ax.transAxes, ls="--", c="red")
     ax.axline((-100, -100), slope=1., color='red', ls='--')

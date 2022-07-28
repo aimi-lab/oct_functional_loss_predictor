@@ -34,13 +34,13 @@ class OCT2VFRegressor:
 
         self.current_time = datetime.now().strftime("%Y%m%d-%H%M%S")
         
-        os.makedirs('weights', exist_ok=True)
-        path_str = "REGR_{}__ep{:02d}_bs{:03d}_lr{:.2E}_{}".format(
+        os.makedirs(Path(__file__).parent.joinpath("weights"), exist_ok=True)
+        path_str = "REGR_PRETRAIN_{}__ep{:02d}_bs{:03d}_lr{:.2E}_{}".format(
             self.current_time,
             args.epochs,
             args.batch_size,
             args.learning_rate,
-            args.target
+            args.target.replace(' ', '-')
         )
 
         self.tb_path = Path(__file__).resolve().parents[0].joinpath("runs", path_str)
@@ -113,7 +113,7 @@ class OCT2VFRegressor:
 
     def load_model(self):
 
-        model = getattr(resnet, self.args.model_name)(pretrained=getattr(self.args, 'pretrained', False), num_classes=1)
+        model = getattr(resnet, self.args.model_name)(pretrained=True, num_classes=1)
         
         print(f'GPU devices: {torch.cuda.device_count()}')
         self.model = nn.DataParallel(model, device_ids=list(range(torch.cuda.device_count())))
@@ -123,7 +123,7 @@ class OCT2VFRegressor:
         self.model.train()
 
         optimizer = optim.SGD(self.model.parameters(), lr=self.args.learning_rate, weight_decay=1e-6, momentum=0.9)
-        lmbda = lambda epoch: 0.99
+        lmbda = lambda epoch: 0.9 ** epoch
         scheduler = optim.lr_scheduler.MultiplicativeLR(optimizer, lr_lambda=lmbda)
 
         # print(f'Applied weights for training loss will be: {self.trainloader.dataset.weights.numpy()}')
@@ -159,7 +159,7 @@ class OCT2VFRegressor:
                     with torch.set_grad_enabled(phase == 'train'):
                         outputs = self.model(inputs)
                         # FIXME: need to scale data?
-                        loss = criterion(outputs, values.view(-1,1)) # sigmoid is included in BCEWithLogitsLoss
+                        loss = criterion(outputs, values.view(-1,1)) 
 
                         if phase == 'train':
                             i_train = i
@@ -181,12 +181,16 @@ class OCT2VFRegressor:
                         epoch_mae = dict_metrics['MAE']
                         epoch_r2 = dict_metrics['R2']
                         # epoch_rocauc_weighted = dict_metrics['ROC AUC weighted']
-                        print(f'{phase} Loss: {epoch_loss} ROC AUC: {epoch_mae}')
+                        print(f'{phase} Loss: {epoch_loss} MAE: {epoch_mae}')
                         dict_metrics['Loss'] = epoch_loss
+                        dict_metrics['LR'] = optimizer.param_groups[0]["lr"]
+
+                        # TODO: add image to summary writer
                         u.write_to_tb(self.writer, dict_metrics.keys(), dict_metrics.values(), n_epoch, phase=phase)
 
                         if phase == 'train':                        
-                            self.writer.add_figure('train example', loader.get_sample(0), global_step=n_epoch)
+                            img_idx = randint(0, 10)
+                            self.writer.add_figure('train example', loader.dataset.dataset.get_sample(img_idx), global_step=n_epoch)
                         elif phase == 'test':
                             self.writer.add_figure('test true preds', u.plot_truth_prediction(running_true, running_pred), global_step=n_epoch)
 

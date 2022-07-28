@@ -79,19 +79,19 @@ class OCTDataset(Dataset):
         # FIXME: ONH images need to be mirrored?
         image_onh = io.imread(OCTDataset.DIR_ONH_IMGS.joinpath(self.idx2onh_dict[exam_id], '0.jpeg'))
 
-        if self.augment_image and random.random() > 0.5:
-            image_onh = np.fliplr(image_onh)
+        # if self.augment_image and random.random() > 0.5:
+        #     image_onh = np.fliplr(image_onh)
 
         proj_images = []
         for img_name in [f'{no}.png' for no in list(range(7)) + [10]]:
             image_proj = io.imread(OCTDataset.DIR_PROJ_IMGS.joinpath(self.idx2proj_dict[exam_id], img_name))
-            # if exam_id.split('_')[1] == 'OD':
-            #     image_proj = image_proj[:, ::-1]
+            if exam_id.split('_')[1] == 'OD':
+                image_proj = image_proj[:, ::-1]
             # print(image_proj.max())
             proj_images.append(image_proj[::-1, :])
 
-        if self.augment_image and random.random() > 0.5:
-            proj_images = [np.fliplr(img) for img in proj_images]
+        # if self.augment_image and random.random() > 0.5:
+        #     proj_images = [np.fliplr(img) for img in proj_images]
         if self.augment_image:
             rot_angle = transforms.RandomRotation.get_params((-2, 2))
             proj_images = [skimage.transform.rotate(img, rot_angle) for img in proj_images]
@@ -133,12 +133,19 @@ class OCTDataset(Dataset):
              figsize=(12, 4))
 
         # print(axs)
-        axs['im0'].imshow(sample['images'][:, :, 0], cmap='inferno')
-        axs['im1'].imshow(sample['images'][:, :, 1], cmap='inferno')
-        axs['im2'].imshow(sample['images'][:, :, 2], cmap='gray')
-        print(f'{sample["uuids"]}\n{sample["values"]:.1f} dB')
+
+        # print(sample['images'][:, :, 0].shape)
+        # print(sample['images'][:, :, 1].shape)
+        # print(sample['images'][:, :, 2].shape)
+
+        axs['im0'].imshow(sample['images'][0, :, :] * 0.5 + 0.5, cmap='gray')
+        axs['im1'].imshow(sample['images'][1, :, :] * 0.5 + 0.5, cmap='gray')
+        axs['im2'].imshow(sample['images'][2, :, :] * 0.5 + 0.5, cmap='gray')
+        # print(f'{sample["uuids"]}\n{sample["values"]:.1f} dB')
+
+        text = f'UUID = {sample["uuids"]}\nMD = {sample["values"]:.1f} dB' #+ '\n' + ''.join([f'{sample["images"][i, :, :].shape} ' for i in range(3)])
         axs['not'].text(
-            0.5, 0.5, f'UUID = {sample["uuids"]}\nMD = {sample["values"]:.1f} dB', fontsize=30,
+            0.5, 0.5, text, fontsize=30,
             horizontalalignment='center', verticalalignment='center', transform=axs['not'].transAxes
             )
 
@@ -149,7 +156,8 @@ class OCTDataset(Dataset):
             # ax.set_title('Normal Title', fontstyle='italic')
             # ax.set_title(label, fontfamily='serif', loc='left', fontsize='medium')
 
-        # fig.savefig(f'{sample["uuids"]}_sample.png')
+        fig.savefig(f'{sample["uuids"]}_sample.png')
+        fig.tight_layout()
         return fig
 
     # def _get_weights_loss(self):

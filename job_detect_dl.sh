@@ -15,7 +15,7 @@
 
 # Runtime and memory
 #SBATCH --time=12:00:00    # days-HH:MM:SS
-#SBATCH --mem-per-cpu=4G # it's memory PER CPU, NOT TOTAL RAM! maximum RAM is 246G in total
+#SBATCH --mem-per-cpu=8G # it's memory PER CPU, NOT TOTAL RAM! maximum RAM is 246G in total
 # total RAM is mem-per-cpu * cpus-per-task
 
 # maximum cores is 20 on all, 10 on long, 24 on gpu, 64 on phi!
@@ -48,5 +48,5 @@ module load Anaconda3
 eval "$(conda shell.bash hook)"
 conda activate pytorch_env
 #module load Workspace
-srun python ./oct_cli.py @configs/train.txt
+srun python ./resnet/oct2vf_cli.py @resnet/configs/train.example.txt
 # srun python ./oct_cli.py @configs/infer.txt
