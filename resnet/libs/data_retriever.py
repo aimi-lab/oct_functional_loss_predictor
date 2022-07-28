@@ -1,4 +1,3 @@
-from __future__ import print_function, division
 import os
 from pathlib import Path
 import torch
@@ -61,6 +60,7 @@ class OCTDataset(Dataset):
         with open(OCTDataset.ID2PROJ_JSON, "r") as infile:
             self.idx2proj_dict = json.load(infile)
 
+        self.augment_image = csv_name == 'crossval.csv'
         self.transform_image = transform_image
 
         # self.weights = self._get_weights_loss()
@@ -79,33 +79,78 @@ class OCTDataset(Dataset):
         # FIXME: ONH images need to be mirrored?
         image_onh = io.imread(OCTDataset.DIR_ONH_IMGS.joinpath(self.idx2onh_dict[exam_id], '0.jpeg'))
 
+        if self.augment_image and random.random() > 0.5:
+            image_onh = np.fliplr(image_onh)
+
         proj_images = []
         for img_name in [f'{no}.png' for no in list(range(7)) + [10]]:
             image_proj = io.imread(OCTDataset.DIR_PROJ_IMGS.joinpath(self.idx2proj_dict[exam_id], img_name))
-            if exam_id.split('_')[1] == 'OD':
-                image_proj = image_proj[:, ::-1]
+            # if exam_id.split('_')[1] == 'OD':
+            #     image_proj = image_proj[:, ::-1]
             # print(image_proj.max())
             proj_images.append(image_proj[::-1, :])
 
-        image0 = image_onh / 255
-        image1 = np.concatenate(proj_images[:4], axis=0) / 255
-        image2 = np.concatenate(proj_images[4:], axis=0) / 255
+        if self.augment_image and random.random() > 0.5:
+            proj_images = [np.fliplr(img) for img in proj_images]
+        if self.augment_image:
+            rot_angle = transforms.RandomRotation.get_params((-2, 2))
+            proj_images = [skimage.transform.rotate(img, rot_angle) for img in proj_images]
+            # scale_factor = 1 + (random.random() * 5 - 1.0) / 10.0
+            # proj_images = [skimage.transform.resize(skimage.transform.rescale(img, scale_factor), img.shape) for img in proj_images]
 
-        image1 = skimage.transform.resize(image1, image0.shape)
-        image2 = skimage.transform.resize(image2, image0.shape)
+        # proj_images = [tensor_transform(img) for img in proj_images]
+
+        image0 = np.concatenate(proj_images[:4], axis=0) / 255
+        image1 = np.concatenate(proj_images[4:], axis=0) / 255
+        image2 = image_onh / 255
+
+        image0 = skimage.transform.resize(image0, image2.shape)
+        image1 = skimage.transform.resize(image1, image2.shape)
 
         image = np.stack([image0, image1, image2], axis=-1)
 
         target = self.target_set[idx].astype(np.float32)
 
         # FIXME: check if seed is needed in case of random augmentation
+        # FIXME: check if transform has to be done before concatenating all images
         # seed = torch.randint(0, 2 ** 32, size=(1,))[0]
         if self.transform_image:
             # random.seed(seed)
             image = self.transform_image(image)
 
-        sample = {'images': image, 'values': target} #, 'center': center}
+        sample = {'images': image, 'values': target, 'uuids': exam_id} #, 'center': center}
         return sample
+
+    def get_sample(self, idx):
+
+        sample = self[idx]
+
+        fig, axs = plt.subplot_mosaic(
+            [['im0', 'im0', 'im1', 'im1', 'im2', 'im2'],
+             ['im0', 'im0', 'im1', 'im1', 'im2', 'im2'], 
+             ['not', 'not', 'not', 'not', 'not', 'not']], 
+             constrained_layout=True,
+             figsize=(12, 4))
+
+        # print(axs)
+        axs['im0'].imshow(sample['images'][:, :, 0], cmap='inferno')
+        axs['im1'].imshow(sample['images'][:, :, 1], cmap='inferno')
+        axs['im2'].imshow(sample['images'][:, :, 2], cmap='gray')
+        print(f'{sample["uuids"]}\n{sample["values"]:.1f} dB')
+        axs['not'].text(
+            0.5, 0.5, f'UUID = {sample["uuids"]}\nMD = {sample["values"]:.1f} dB', fontsize=30,
+            horizontalalignment='center', verticalalignment='center', transform=axs['not'].transAxes
+            )
+
+        for _, ax in axs.items():
+            ax.set_axis_off()
+
+            # if label == 'not': continue
+            # ax.set_title('Normal Title', fontstyle='italic')
+            # ax.set_title(label, fontfamily='serif', loc='left', fontsize='medium')
+
+        # fig.savefig(f'{sample["uuids"]}_sample.png')
+        return fig
 
     # def _get_weights_loss(self):
     #     labels_sum = np.sum(self.label_set, axis=0)
@@ -126,6 +171,9 @@ class OCTDataset(Dataset):
 
 if __name__ == '__main__':
 
-    d = OCTDataset('test.csv')
-    d[0]
+    d = OCTDataset('crossval.csv')
+    # d[0]
+    for ii in range(20):
+        sample = d.get_sample(0)
+
     # d._get_posweights()

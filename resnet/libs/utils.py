@@ -13,6 +13,9 @@ from collections import OrderedDict
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import pathlib
+import seaborn as sns
+
+sns.set_style('white')
 
 # from pytorch_grad_cam import GradCAM
 # from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
@@ -465,6 +468,48 @@ def compute_contrast(image_dir: pathlib.Path) -> None:
 
     plt.hist(contrast_list, 20)
     plt.savefig('hihi.png')
+
+
+def plot_truth_prediction(y_true, y_pred):
+
+    ############## ONLY TEST ########################
+
+    fig, ax = plt.subplots(figsize=(12, 8))
+
+    # bx = np.arange(-10, 30, 0.1)
+    # by = np.searchsorted(GLAUCOMA_GS_THRESHOLDS, bx) % 2
+    # ax.fill_between(bx, 0, 1, where=by, color='black', alpha=0.05, transform=ax.get_xaxis_transform())
+    # ax.fill_betweenx(bx, 0, 1, where=by, color='black', alpha=0.05, transform=ax.get_yaxis_transform())
+
+    sns.scatterplot(x=y_pred, y=y_true, ax=ax, alpha=0.5, color='black') #, style="n_slices", ax=ax)
+
+    # ax.plot([0, 1], [0, 1], transform=ax.transAxes, ls="--", c="red")
+    ax.axline((-100, -100), slope=1., color='red', ls='--')
+    
+    x = np.linspace(-100, 100, 2)
+    y = np.linspace(-100, 100, 2)
+    error = np.ones(2)
+    error2 = np.ones(2) * 2
+    plt.fill_between(x, y - error, y + error, color='red', alpha=0.15)   
+    plt.fill_between(x, y - error2, y + error2, color='red', alpha=0.15)   
+    
+    ax.set_aspect('equal')
+
+    _ = plt.ylabel("Predicted MD [dB]")
+    _ = plt.xlabel("True MD [dB]")
+
+
+    limone = min(y_true.min(), y_pred.min()) - 1, max(y_true.max(), y_pred.max()) + 1
+    _ = plt.xlim(limone)
+    _ = plt.ylim(limone)
+
+    # plt.legend(loc=2, borderaxespad=0., handletextpad=0., fontsize='small', frameon=False)
+    # fig.tight_layout()
+
+    # fig.savefig(os.path.join(save_dir, 'true_predictions_plot_only_test.png'))
+    # fig.clf()
+    # plt.close()
+    return fig
 
 
 if __name__ == '__main__':

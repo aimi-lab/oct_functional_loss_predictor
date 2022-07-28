@@ -56,28 +56,28 @@ class OCT2VFRegressor:
 
         if self.args.resize:
             t = transforms.Compose([
-                Resize(self.args.resize), 
-                transforms.ToTensor(), 
+                Resize(self.args.resize),
+                transforms.ToTensor(),  
                 # transforms.RandomHorizontalFlip(), 
                 # transforms.RandomRotation(10),
                 transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
             ]) 
-            t_test = transforms.Compose([
-                Resize(self.args.resize), 
-                transforms.ToTensor(), 
-                transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
-            ]) 
+            # t_test = transforms.Compose([
+            #     Resize(self.args.resize), 
+            #     transforms.ToTensor(), 
+            #     transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
+            # ]) 
         else:
             t = transforms.Compose([
-                transforms.ToTensor(), 
                 # transforms.RandomHorizontalFlip(), 
                 # transforms.RandomRotation(10),
+                transforms.ToTensor(),  
                 transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
             ])
-            t_test = transforms.Compose([
-                transforms.ToTensor(), 
-                transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
-            ]) 
+            # t_test = transforms.Compose([
+            #     transforms.ToTensor(), 
+            #     transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
+            # ]) 
 
         trainvalset = OCTDataset('crossval.csv', transform_image=t)
         sgkf = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=RNDM)
@@ -92,7 +92,7 @@ class OCT2VFRegressor:
         self.trainloader = torch.utils.data.DataLoader(trainset, batch_size=self.args.batch_size, shuffle=True, num_workers=0)
         self.valloader = torch.utils.data.DataLoader(valset, batch_size=self.args.batch_size, shuffle=True, num_workers=0)
 
-        testset = OCTDataset('test.csv', transform_image=t_test)
+        testset = OCTDataset('test.csv', transform_image=t)
         testset_size = len(testset)
         self.writing_freq_test = testset_size // self.args.batch_size  # Only once per epoch
         self.testloader = torch.utils.data.DataLoader(testset, batch_size=self.args.batch_size, shuffle=True, num_workers=0)
@@ -184,6 +184,11 @@ class OCT2VFRegressor:
                         print(f'{phase} Loss: {epoch_loss} ROC AUC: {epoch_mae}')
                         dict_metrics['Loss'] = epoch_loss
                         u.write_to_tb(self.writer, dict_metrics.keys(), dict_metrics.values(), n_epoch, phase=phase)
+
+                        if phase == 'train':                        
+                            self.writer.add_figure('train example', loader.get_sample(0), global_step=n_epoch)
+                        elif phase == 'test':
+                            self.writer.add_figure('test true preds', u.plot_truth_prediction(running_true, running_pred), global_step=n_epoch)
 
                         running_pred = []
                         running_true = []
