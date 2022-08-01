@@ -109,10 +109,11 @@ def calculate_metrics(y_true, y_pred):
     if type(y_pred) == list:
         y_pred = np.concatenate(y_pred, axis=0)
 
-    mae = metrics.mean_absolute_error(y_true, y_pred)
-    r2 = metrics.r2_score(y_true, y_pred)
+    mae = min(metrics.mean_absolute_error(y_true, y_pred), 5)
+    mse = metrics.mean_squared_error(y_true, y_pred)
+    r2 = max(0, metrics.r2_score(y_true, y_pred))
 
-    dict_metrics = {'R2': r2, 'MAE': mae}
+    dict_metrics = {'R2': r2, 'MAE': mae, 'MSE': mse}
 
     return dict_metrics
 
@@ -467,14 +468,7 @@ def compute_contrast(image_dir: pathlib.Path) -> None:
     plt.savefig('hihi.png')
 
 
-def plot_truth_prediction(y_true, y_pred):
-
-    if type(y_true) == list:
-        y_true = np.concatenate(y_true, axis=0)
-    if type(y_pred) == list:
-        y_pred = np.concatenate(y_pred, axis=0)
-
-    fig, ax = plt.subplots(figsize=(12, 8))
+def _plot_truth_pred(ax, y_true, y_pred, title):
 
     # bx = np.arange(-10, 30, 0.1)
     # by = np.searchsorted(GLAUCOMA_GS_THRESHOLDS, bx) % 2
@@ -490,21 +484,35 @@ def plot_truth_prediction(y_true, y_pred):
     y = np.linspace(-100, 100, 2)
     error = np.ones(2)
     error2 = np.ones(2) * 2
-    plt.fill_between(x, y - error, y + error, color='red', alpha=0.15)   
-    plt.fill_between(x, y - error2, y + error2, color='red', alpha=0.15)   
+    ax.fill_between(x, y - error, y + error, color='red', alpha=0.15)   
+    ax.fill_between(x, y - error2, y + error2, color='red', alpha=0.15)   
     
     ax.set_aspect('equal')
+    ax.set_title(title)
 
     _ = plt.ylabel("Predicted MD [dB]")
     _ = plt.xlabel("True MD [dB]")
 
-
     limone = min(y_true.min(), y_pred.min()) - 1, max(y_true.max(), y_pred.max()) + 1
-    _ = plt.xlim(limone)
-    _ = plt.ylim(limone)
+    _ = ax.set_xlim(limone)
+    _ = ax.set_ylim(limone)
 
-    # plt.legend(loc=2, borderaxespad=0., handletextpad=0., fontsize='small', frameon=False)
-    # fig.tight_layout()
+
+def plot_truth_prediction(y_true, y_pred):
+
+    if type(y_true) == list:
+        y_true = np.concatenate(y_true, axis=0)
+    if type(y_pred) == list:
+        y_pred = np.concatenate(y_pred, axis=0)
+
+    if y_true.shape[1] > 1:
+        fig, axes = plt.subplots(3, 4, figsize=(6, 6))
+        for ii, ax in enumerate(axes.flat[:10]):
+            title = f'Cluster {ii + 1}'
+            _plot_truth_pred(ax, y_true[:, ii], y_pred[:, ii], title)
+    else:
+        fig, ax = plt.subplots(figsize=(12, 9))
+        _plot_truth_pred(ax, y_true, y_pred, 'MD')
 
     # fig.savefig(os.path.join(save_dir, 'true_predictions_plot_only_test.png'))
     # fig.clf()
