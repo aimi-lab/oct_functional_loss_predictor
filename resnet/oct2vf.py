@@ -28,19 +28,22 @@ DIR_SLICES = "slices"
 class OCT2VFRegressor:
 
     def __init__(self, args) -> None:
-        
+
         self.data_path = DIR_UBELIX if args.ubelix else DIR_LOCAL
         self.slices_path = self.data_path.joinpath(DIR_SLICES)
 
         self.current_time = datetime.now().strftime("%Y%m%d-%H%M%S")
         
+        self._num_classes = 1 if args.target == 'MD' else 10
+
         os.makedirs(Path(__file__).parent.joinpath("weights"), exist_ok=True)
-        path_str = "REGR_PRETRAIN_{}__ep{:02d}_bs{:03d}_lr{:.2E}_{}".format(
+        path_str = "REGR_PRETRAIN_AUGMENT_{}__ep{:02d}_bs{:03d}_lr{:.2E}_{}_{}_INTERFC_SGD_INCREASED61WITH49_NOFLIP".format(
             self.current_time,
             args.epochs,
             args.batch_size,
             args.learning_rate,
-            args.target.replace(' ', '-')
+            args.target.replace(' ', '-'),
+            args.images.upper()
         )
 
         self.tb_path = Path(__file__).resolve().parents[0].joinpath("runs", path_str)
@@ -66,7 +69,7 @@ class OCT2VFRegressor:
                 transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
             ])
 
-        trainvalset = OCTDataset('crossval.csv', transform_image=t)
+        trainvalset = OCTDataset('crossval.csv', transform_image=t, thick_or_onh=self.args.images, target=self.args.target)
         sgkf = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=RNDM)
         trainset_indices, valset_indices = list(sgkf.split(trainvalset.index_set, trainvalset.gs_set, groups=trainvalset.patient_set))[0]
         valset_size = len(valset_indices)
@@ -79,7 +82,7 @@ class OCT2VFRegressor:
         self.trainloader = torch.utils.data.DataLoader(trainset, batch_size=self.args.batch_size, shuffle=True, num_workers=0)
         self.valloader = torch.utils.data.DataLoader(valset, batch_size=self.args.batch_size, shuffle=True, num_workers=0)
 
-        testset = OCTDataset('test.csv', transform_image=t)
+        testset = OCTDataset('test.csv', transform_image=t, thick_or_onh=self.args.images, target=self.args.target)
         testset_size = len(testset)
         self.writing_freq_test = testset_size // self.args.batch_size  # Only once per epoch
         self.testloader = torch.utils.data.DataLoader(testset, batch_size=self.args.batch_size, shuffle=True, num_workers=0)
@@ -100,22 +103,35 @@ class OCT2VFRegressor:
 
     def load_model(self):
 
-        model = getattr(resnet, self.args.model_name)(pretrained=True, num_classes=1)
+        model = getattr(resnet, self.args.model_name)(pretrained=True, num_classes=self._num_classes)
         
         print(f'GPU devices: {torch.cuda.device_count()}')
         self.model = nn.DataParallel(model, device_ids=list(range(torch.cuda.device_count())))
         self.model.to(self.device)
 
+    def compute_loss(self, outputs, values, criterion):
+        if self._num_classes == 1:
+            loss = criterion(outputs, values.view(-1, 1)) 
+        else:
+            loss = 0
+            for ii in range(self._num_classes):
+                cluster_loss = criterion(outputs[:, ii], values[:, ii])
+                loss += cluster_loss
+        return loss
+
     def train(self):
         self.model.train()
 
         optimizer = optim.SGD(self.model.parameters(), lr=self.args.learning_rate, weight_decay=1e-6, momentum=0.9)
+        # optimizer = optim.Adam(self.model.parameters(), lr=self.args.learning_rate)
+        # lmbda = lambda epoch: 0.99
         # scheduler = optim.lr_scheduler.MultiplicativeLR(optimizer, lr_lambda=lmbda)
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max')
 
         # print(f'Applied weights for training loss will be: {self.trainloader.dataset.weights.numpy()}')
 
         criterion = nn.L1Loss() 
+        # criterion = nn.MSELoss() 
 
         best_r2 = 0
         
@@ -148,8 +164,8 @@ class OCT2VFRegressor:
 
                     with torch.set_grad_enabled(phase == 'train'):
                         outputs = self.model(inputs)
-                        # FIXME: need to scale data?
-                        loss = criterion(outputs, values.view(-1,1)) 
+
+                        loss = self.compute_loss(outputs, values, criterion)
 
                         if phase == 'train':
                             i_train = i
@@ -179,9 +195,12 @@ class OCT2VFRegressor:
                         u.write_to_tb(self.writer, dict_metrics.keys(), dict_metrics.values(), n_epoch, phase=phase)
 
                         if phase == 'train':                        
-                            img_idx = randint(0, 10)
-                            self.writer.add_figure('train example', loader.dataset.dataset.get_sample(img_idx), global_step=n_epoch)
+                            # img_idx = randint(0, 10)
+                            self.writer.add_figure('train example', loader.dataset.dataset.get_sample(0), global_step=n_epoch)
                         elif phase == 'test':
+                            # print(len(running_true))
+                            # print(running_true)
+
                             self.writer.add_figure('test true preds', u.plot_truth_prediction(running_true, running_pred), global_step=n_epoch)
 
                         running_pred = []
@@ -200,11 +219,11 @@ class OCT2VFRegressor:
             #         Path(__file__).parents[0].joinpath('weights', f'detector_{self.current_time}_e{epoch + 1}.pth'))
     
         # Save best models and create symlink in working directories
-        best_rocauc_model_path = Path(__file__).parents[0].joinpath(
+        best_r2_model = Path(__file__).parents[0].joinpath(
             'weights', f'regressor_{self.current_time}_bestR2.pth'
         )
-        torch.save(best_model.state_dict(), best_rocauc_model_path)
-        self.tb_path.joinpath('regressor_bestR2.pth').symlink_to(best_rocauc_model_path)
+        torch.save(best_model.state_dict(), best_r2_model)
+        self.tb_path.joinpath('regressor_bestR2.pth').symlink_to(best_r2_model)
 
         # FIXME: implement final inference plots
         # self.infer(best_model, self.tb_path)
