@@ -123,8 +123,8 @@ class OCT2VFRegressor:
         self.model.train()
 
         optimizer = optim.SGD(self.model.parameters(), lr=self.args.learning_rate, weight_decay=1e-6, momentum=0.9)
-        lmbda = lambda epoch: 0.9 ** epoch
-        scheduler = optim.lr_scheduler.MultiplicativeLR(optimizer, lr_lambda=lmbda)
+        # scheduler = optim.lr_scheduler.MultiplicativeLR(optimizer, lr_lambda=lmbda)
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max')
 
         # print(f'Applied weights for training loss will be: {self.trainloader.dataset.weights.numpy()}')
 
@@ -202,7 +202,8 @@ class OCT2VFRegressor:
                             best_r2 = epoch_r2
                             best_model = copy.deepcopy(self.model) 
 
-            scheduler.step()
+            # pass validation MAE/R2 to LR scheduler
+            scheduler.step(epoch_r2)
             print(f'Epoch {epoch + 1} finished')
                 
             # torch.save(self.model.state_dict(),
