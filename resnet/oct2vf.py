@@ -58,26 +58,13 @@ class OCT2VFRegressor:
             t = transforms.Compose([
                 Resize(self.args.resize),
                 transforms.ToTensor(),  
-                # transforms.RandomHorizontalFlip(), 
-                # transforms.RandomRotation(10),
                 transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
             ]) 
-            # t_test = transforms.Compose([
-            #     Resize(self.args.resize), 
-            #     transforms.ToTensor(), 
-            #     transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
-            # ]) 
         else:
             t = transforms.Compose([
-                # transforms.RandomHorizontalFlip(), 
-                # transforms.RandomRotation(10),
                 transforms.ToTensor(),  
                 transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
             ])
-            # t_test = transforms.Compose([
-            #     transforms.ToTensor(), 
-            #     transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
-            # ]) 
 
         trainvalset = OCTDataset('crossval.csv', transform_image=t)
         sgkf = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=RNDM)
@@ -142,15 +129,18 @@ class OCT2VFRegressor:
                 if phase == 'train':
                     self.model.train()
                     loader = self.trainloader
+                    OCTDataset.augment_image = True
                     writing_freq = self.writing_freq_train
                     i_train = 0
                 elif phase == 'validation':
                     self.model.eval()
                     loader = self.valloader
+                    OCTDataset.augment_image = False
                     writing_freq = self.writing_freq_val
                 elif phase == 'test':
                     self.model.eval()
                     loader = self.testloader
+                    OCTDataset.augment_image = False
                     writing_freq = self.writing_freq_test
 
                 for i, data in enumerate(loader):

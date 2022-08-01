@@ -11,6 +11,7 @@ import json
 import skimage.transform
 from skimage import io
 import torchvision.transforms as transforms
+import imgaug.augmenters as iaa
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,7 @@ class OCTDataset(Dataset):
 
     ID2ONH_JSON = Path(__file__).parent.parent.parent.joinpath("inputs", "dataset", "idx_to_onh.json")
     ID2THICK_JSON = Path(__file__).parent.parent.parent.joinpath("inputs", "dataset", "idx_to_thicknesses.json")
+    augment_image = False
 
     def __init__(self, csv_name, target='MD', transform_image=None):
 
@@ -113,6 +115,19 @@ class OCTDataset(Dataset):
             # print(image_thick.max())
             proj_images.append(image_thick[::-1, :, :])
 
+            if OCTDataset.augment_image:
+                aug = iaa.Sequential([  
+                        iaa.Fliplr(0.5),
+                        iaa.Affine(
+                            scale={"x": (0.95, 1.05), "y": (0.95, 1.05)},
+                            translate_percent={"x": (-0.05, 0.05), "y": (-0.05, 0.05)},
+                            rotate=(-2, 2),
+                        ),
+                        # iaa.LinearContrast((0.95, 1.05))
+                    ])
+                aug_det = aug.to_deterministic()
+                proj_images = [aug_det.augment_image(img) for img in proj_images]
+
         # if self.augment_image and random.random() > 0.5:
         #     proj_images = [np.fliplr(img) for img in proj_images]
         if self.augment_image:
@@ -129,10 +144,23 @@ class OCTDataset(Dataset):
         # image1 = np.concatenate(proj_images[4:], axis=0) / 255
         # image2 = image_onh / 255
 
-        # image0 = skimage.transform.resize(image0, image2.shape)
-        # image1 = skimage.transform.resize(image1, image2.shape)
+            image_onh = io.imread(OCTDataset.DIR_ONH_IMGS.joinpath(self.idx2onh_dict[exam_id], '0.jpeg'))
+            image_onh = image_onh / 256
+            # FIXME: do not mirror when clusters (?). Flip only if Left/Right eye
 
-        image = np.stack([image0, image1, image2], axis=-1)
+            if OCTDataset.augment_image:
+                # FIXME: consider reduction of augmentation parameters
+                aug = iaa.Sequential([  
+                                    # iaa.Fliplr(0.5),
+                                    iaa.Affine(
+                                        scale={"x": (0.99, 1.09), "y": (0.99, 1.01)},
+                                        translate_percent={"x": (-0.02, 0.02), "y": (-0.05, 0.02)},
+                                        rotate=(-0.8, 0.8),
+                                    ),
+                                    # iaa.LinearContrast((0.95, 1.05))
+                                ])
+                image_onh = aug.augment_image(image_onh)
+                # image_onh = np.fliplr(image_onh)
 
         target = self.target_set[idx].astype(np.float32)
 
