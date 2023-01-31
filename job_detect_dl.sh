@@ -11,21 +11,21 @@
 # Job name
 #SBATCH --job-name="train_detector"
 # Partition
-#SBATCH --partition=gpu-invest # all, gpu, phi, long, gpu-invest
+#SBATCH --partition=gpu # all, gpu, phi, long, gpu-invest
 
 # Runtime and memory
-#SBATCH --time=12:00:00    # days-HH:MM:SS
+#SBATCH --time=24:00:00    # days-HH:MM:SS
 #SBATCH --mem-per-cpu=8G # it's memory PER CPU, NOT TOTAL RAM! maximum RAM is 246G in total
 # total RAM is mem-per-cpu * cpus-per-task
 
 # maximum cores is 20 on all, 10 on long, 24 on gpu, 64 on phi!
-#SBATCH --cpus-per-task=4
+#SBATCH --cpus-per-task=8
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 ##SBATCH --ntasks-per-node=1
 
 # on gpu partition
-#SBATCH --gres=gpu:rtx3090:1
+#SBATCH --gres=gpu:rtx3090:2
 
 # Set the current working directory.
 # All relative paths used in the job script are relative to this directory
@@ -45,8 +45,11 @@
 # Main Python code below this line
 module load Workspace
 module load Anaconda3
+module load CUDA
 eval "$(conda shell.bash hook)"
 conda activate pytorch_env
-#module load Workspace
+
+# srun python trial.py
 srun python ./resnet/oct2vf_cli.py @resnet/configs/train.example.txt
-# srun python ./oct_cli.py @configs/infer.txt
+# srun python ./resnet/oct2vf_cli.py @resnet/configs/infer.example.txt
+# srun python ./resnet/oct2vf_cli.py @resnet/configs/train_same_as_paper.txt

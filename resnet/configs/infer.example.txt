@@ -1,0 +1,3 @@
+infer
+--model-dir
+/storage/homefs/ds21n601/perimetry_project/resnet/runs/REGR_PRETRAIN_AUGMENT_20220807-164652__ep100_bs032_lr1.00E-04_clusters_THICK_ADAM_RESNET50_FINAL_RT

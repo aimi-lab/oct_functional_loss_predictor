@@ -12,6 +12,7 @@ import skimage.transform
 from skimage import io
 import torchvision.transforms as transforms
 import imgaug.augmenters as iaa
+import cv2
 
 logger = logging.getLogger(__name__)
 
@@ -40,9 +41,9 @@ class OCTDataset(Dataset):
     ID2THICK_JSON = Path(__file__).parent.parent.parent.joinpath("inputs", "dataset", "idx_to_thicknesses.json")
     augment_image = False
 
-    def __init__(self, csv_name, target='MD', transform_image=None, thick_or_onh='thick'):
+    def __init__(self, csv_name, target, transform_image, thick_or_onh='thick'):
 
-        assert thick_or_onh in ['thick', 'onh'], 'thick_or_onh: choice not valid'
+        assert thick_or_onh in ['thick', 'onh', 'combined'], 'thick_or_onh: choice not valid'
         
         df = pd.read_csv(OCTDataset.DIR_DATAFILES.joinpath(csv_name))
         # df = df[df.slices == 61].copy()
@@ -59,6 +60,7 @@ class OCTDataset(Dataset):
         self.dataset_len = len(df)
         self.patient_set = df["Patient ID"]
         self.gs_set = df['GS']
+        self.weight_set = self._get_weights_loss()
 
         with open(OCTDataset.ID2ONH_JSON, "r") as infile:
             self.idx2onh_dict = json.load(infile)
@@ -69,7 +71,6 @@ class OCTDataset(Dataset):
         self.transform_image = transform_image
         self.return_imgs = thick_or_onh
 
-        # self.weights = self._get_weights_loss()
         # self.posweights = self._get_posweights()
 
     @staticmethod
@@ -103,6 +104,69 @@ class OCTDataset(Dataset):
     def __len__(self):
         return self.dataset_len
 
+    def get_thickmap_images(self, exam_id):
+
+        proj_images = []
+        # for img_name in [f'{no}.png' for no in list(range(1, 7)) + [10]]:
+        for img_name in [f'{no}.png' for no in [10]]:
+            image_thick = io.imread(OCTDataset.DIR_THICK_IMGS.joinpath(self.idx2thick_dict[exam_id], img_name))
+
+            # image_thick = OCTDataset.rgba2rgb(image_thick)
+            image_thick = cv2.cvtColor(image_thick, cv2.COLOR_RGBA2GRAY)
+            
+            if exam_id.split('_')[1] == 'OD':
+                image_thick = image_thick[:, ::-1]
+            proj_images.append(image_thick[::-1, :])
+
+        if OCTDataset.augment_image:
+            aug = iaa.Sequential([  
+                    # iaa.Fliplr(0.5),
+                    iaa.Affine(
+                        scale={"x": (0.99, 1.01), "y": (0.99, 1.01)},
+                        translate_percent={"x": (-0.01, 0.01), "y": (-0.01, 0.01)},
+                        rotate=(-0.5, 0.5),
+                    ),
+                    # iaa.LinearContrast((0.95, 1.05))
+                ])
+            aug_det = aug.to_deterministic()
+            proj_images = [aug_det.augment_image(img) for img in proj_images]
+
+        image0 = np.concatenate(proj_images, axis=0) / 256
+        # image0 = np.concatenate([img[:, :, 0] for img in proj_images], axis=0) / 256
+        # image1 = np.concatenate([img[:, :, 1] for img in proj_images], axis=0) / 256
+        # image2 = np.concatenate([img[:, :, 2] for img in proj_images], axis=0) / 256
+
+        image = np.stack([image0, image0, image0], axis=-1)
+        # image = np.stack([image0, image1, image2], axis=-1)
+        return image
+
+    def get_onh_image(self, exam_id):
+
+        image_onh = io.imread(OCTDataset.DIR_ONH_IMGS.joinpath(self.idx2onh_dict[exam_id], '0.jpeg'))
+        image_onh = image_onh / 256
+
+        # FIXME: do not mirror when clusters (?). Flip only if Left/Right eye
+        # it seems that not flipping ONH images performs better
+        # if exam_id.split('_')[1] == 'OD':
+        #     image_onh = image_onh[:, ::-1]
+
+        if OCTDataset.augment_image:
+            # FIXME: consider reduction of augmentation parameters
+            aug = iaa.Sequential([  
+                                # iaa.Fliplr(0.5),
+                                iaa.Affine(
+                                    scale={"x": (0.99, 1.09), "y": (0.99, 1.01)},
+                                    translate_percent={"x": (-0.02, 0.02), "y": (-0.05, 0.02)},
+                                    rotate=(-0.8, 0.8),
+                                ),
+                                # iaa.LinearContrast((0.95, 1.05))
+                            ])
+            image_onh = aug.augment_image(image_onh)
+            # image_onh = np.fliplr(image_onh)
+
+        image = np.stack([image_onh, image_onh, image_onh], axis=-1)
+        return image
+
     def __getitem__(self, idx):
 
         if torch.is_tensor(idx):
@@ -110,71 +174,23 @@ class OCTDataset(Dataset):
 
         exam_id = self.index_set[idx]
         target = self.target_set[idx].astype(np.float32)
+        weight = self.weight_set[idx]
 
         if self.return_imgs == 'thick':
-            proj_images = []
-            for img_name in [f'{no}.png' for no in list(range(1, 7)) + [10]]:
-                image_thick = io.imread(OCTDataset.DIR_THICK_IMGS.joinpath(self.idx2thick_dict[exam_id], img_name))
-                image_thick = OCTDataset.rgba2rgb(image_thick)
-                if exam_id.split('_')[1] == 'OD':
-                    image_thick = image_thick[:, ::-1, :]
-                proj_images.append(image_thick[::-1, :, :])
-
-            if OCTDataset.augment_image:
-                aug = iaa.Sequential([  
-                        iaa.Fliplr(0.5),
-                        iaa.Affine(
-                            scale={"x": (0.95, 1.05), "y": (0.95, 1.05)},
-                            translate_percent={"x": (-0.05, 0.05), "y": (-0.05, 0.05)},
-                            rotate=(-2, 2),
-                        ),
-                        # iaa.LinearContrast((0.95, 1.05))
-                    ])
-                aug_det = aug.to_deterministic()
-                proj_images = [aug_det.augment_image(img) for img in proj_images]
-
-            # if self.augment_image and random.random() > 0.5:
-            #     proj_images = [np.fliplr(img) for img in proj_images]
-            # if self.augment_image:
-            #     rot_angle = transforms.RandomRotation.get_params((-2, 2))
-            #     proj_images = [skimage.transform.rotate(img, rot_angle) for img in proj_images]
-                # scale_factor = 1 + (random.random() * 5 - 1.0) / 10.0
-                # proj_images = [skimage.transform.resize(skimage.transform.rescale(img, scale_factor), img.shape) for img in proj_images]
-
-            image0 = np.concatenate([img[:, :, 0] for img in proj_images], axis=0) / 256
-            image1 = np.concatenate([img[:, :, 1] for img in proj_images], axis=0) / 256
-            image2 = np.concatenate([img[:, :, 2] for img in proj_images], axis=0) / 256
-            image = np.stack([image0, image1, image2], axis=-1)
-        
+            image_thick = self.get_thickmap_images(exam_id)
+            image_thick = self.transform_image(image_thick)
+            image_onh = 'dummy'
+        elif self.return_imgs == 'onh':
+            image_onh = self.get_onh_image(exam_id)
+            image_onh = self.transform_image(image_onh)
+            image_thick = 'dummy'
         else:
+            image_thick = self.get_thickmap_images(exam_id)
+            image_onh = self.get_onh_image(exam_id)
+            image_onh = self.transform_image(image_onh)
+            image_thick = self.transform_image(image_thick)
 
-            image_onh = io.imread(OCTDataset.DIR_ONH_IMGS.joinpath(self.idx2onh_dict[exam_id], '0.jpeg'))
-            image_onh = image_onh / 256
-            # FIXME: do not mirror when clusters (?). Flip only if Left/Right eye
-
-            if OCTDataset.augment_image:
-                # FIXME: consider reduction of augmentation parameters
-                aug = iaa.Sequential([  
-                                    # iaa.Fliplr(0.5),
-                                    iaa.Affine(
-                                        scale={"x": (0.99, 1.09), "y": (0.99, 1.01)},
-                                        translate_percent={"x": (-0.02, 0.02), "y": (-0.05, 0.02)},
-                                        rotate=(-0.8, 0.8),
-                                    ),
-                                    # iaa.LinearContrast((0.95, 1.05))
-                                ])
-                image_onh = aug.augment_image(image_onh)
-                # image_onh = np.fliplr(image_onh)
-
-            image = np.stack([image_onh, image_onh, image_onh], axis=-1)
-
-        # FIXME: check if transform has to be done before concatenating all images
-        # seed = torch.randint(0, 2 ** 32, size=(1,))[0]
-        if self.transform_image:
-            # random.seed(seed)
-            image = self.transform_image(image)
-
-        sample = {'images': image, 'values': target, 'uuids': exam_id} #, 'center': center}
+        sample = {'images_thick': image_thick, 'images_onh': image_onh, 'values': target, 'uuids': exam_id, 'weights': weight} #, 'center': center}
         return sample
 
     def get_sample(self, idx):
@@ -194,9 +210,9 @@ class OCTDataset(Dataset):
         # print(sample['images'][:, :, 1].shape)
         # print(sample['images'][:, :, 2].shape)
 
-        axs['im0'].imshow(sample['images'][0, :, :] * 0.5 + 0.5, cmap='gray')
-        axs['im1'].imshow(sample['images'][1, :, :] * 0.5 + 0.5, cmap='gray')
-        axs['im2'].imshow(sample['images'][2, :, :] * 0.5 + 0.5, cmap='gray')
+        axs['im0'].imshow(sample[f'images_{self.return_imgs}'][0, :, :] * 0.5 + 0.5, cmap='gray')
+        axs['im1'].imshow(sample[f'images_{self.return_imgs}'][1, :, :] * 0.5 + 0.5, cmap='gray')
+        axs['im2'].imshow(sample[f'images_{self.return_imgs}'][2, :, :] * 0.5 + 0.5, cmap='gray')
         # print(f'{sample["uuids"]}\n{sample["values"]:.1f} dB')
 
         # text = f'UUID = {sample["uuids"]}\nMD = {sample["values"]:.1f} dB' #+ '\n' + ''.join([f'{sample["images"][i, :, :].shape} ' for i in range(3)])
@@ -214,15 +230,15 @@ class OCTDataset(Dataset):
             # ax.set_title(label, fontfamily='serif', loc='left', fontsize='medium')
 
         # fig.savefig(f'{sample["uuids"]}_sample.png')
-        # fig.tight_layout()
+        fig.tight_layout()
         return fig
 
-    # def _get_weights_loss(self):
-    #     labels_sum = np.sum(self.label_set, axis=0)
-    #     largest_class = max(labels_sum)
-    #     weights = largest_class / labels_sum
-    #     weights = torch.from_numpy(weights)
-    #     return weights
+    def _get_weights_loss(self):
+        value_counts = self.gs_set.value_counts()
+        weights_dict = (value_counts.max() / value_counts).to_dict()
+        weights = self.gs_set.map(weights_dict)
+        # weights = torch.from_numpy(weights.values)
+        return weights
 
     # def _get_posweights(self):
     #     class_counts = np.sum(self.label_set, axis=0)
@@ -236,7 +252,7 @@ class OCTDataset(Dataset):
 
 if __name__ == '__main__':
 
-    d = OCTDataset('crossval.csv')
+    d = OCTDataset('crossval.csv', target='MD', transform_image=None)
     # d[0]
     for ii in range(20):
         sample = d.get_sample(0)

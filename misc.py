@@ -414,11 +414,11 @@ if __name__ == '__main__':
 
     #####################
 
-    # analyse_augmented_features("/home/davide/Dropbox (ARTORG)/CAS_Final_Project/src/outputs/FEATURE_AUGMENTATION_REGRESSION_MD")
+    analyse_augmented_features("/storage/homefs/ds21n601/perimetry_project/outputs/FEATURE_AUGMENTATION_REGRESSION_MD")
 
     #####################
 
-    make_dataset(plot=True)
+    # make_dataset(plot=True)
 
     #####################
 

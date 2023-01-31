@@ -74,7 +74,7 @@ def main():
         )
     regress.read_data(
         keep_age=False, 
-        features_from='/home/davide/Dropbox (ARTORG)/CAS_Final_Project/src/outputs/FEATURE_AUGMENTATION_REGRESSION_MD/00_important_features.txt'
+        features_from='/storage/homefs/ds21n601/perimetry_project/outputs/FEATURE_AUGMENTATION_REGRESSION_MD/00_important_features.txt'
         )
     regress.set_search_grid(**search_grid)
     regress.run('r2', random=True)
