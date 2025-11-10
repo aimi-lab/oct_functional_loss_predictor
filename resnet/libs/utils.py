@@ -1,26 +1,24 @@
-import torch
+import argparse
+import pathlib
+import shutil
+from collections import OrderedDict
+
+import cv2
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import math
-from sklearn import metrics
-# from scipy.interpolate import interp1d
-import argparse
-import shutil
-import json
-import cv2
-from collections import OrderedDict
-import matplotlib.pyplot as plt
-# import matplotlib.gridspec as gridspec
-import pathlib
 import seaborn as sns
+import torch
+from torchvision.transforms.functional import to_pil_image
 from skimage.transform import resize
+from sklearn import metrics
 
 np.set_printoptions(precision=2)
 sns.set_context('poster')
 
-from pytorch_grad_cam import GradCAM, GradCAMPlusPlus
-# from pytorch_grad_cam.utils.model_targets import RawScoresOutputTarget
-from pytorch_grad_cam.utils.image import show_cam_on_image
+from torchcam.methods import CAM
+from torchcam.utils import overlay_mask
+
 
 class RawScoresMultiOutputTarget:
     def __init__(self, out_number):
@@ -155,14 +153,6 @@ def run_model_on_dataset(model, data_loader, device, image_type):
     return trues, preds, uuid_list
 
 
-# def create_output_images(model, data_loader, device):
-    
-#     if isinstance(data_loader.dataset, torch.utils.data.Subset):
-#         dataset = data_loader.dataset.dataset
-
-# [ClassifierOutputTarget(category) for category in target_categories]
-
-
 def eval_model(model, testset, device, save_path, image_type, dtype='test'):
 
     assert image_type in ['thick', 'onh', 'combined']
@@ -226,87 +216,53 @@ def make_output_images(model, data_loader, device, save_path, image_type, n_clas
     
     model.eval()
 
-    target_layers = [model.module.layer4[-1]] # changed from layer 4
-    # cam = GradCAM(model=model, target_layers=target_layers, use_cuda=True)
-    cam = GradCAMPlusPlus(model=model, target_layers=target_layers, use_cuda=True)
+    cam = CAM(model, 'module.layer4', 'module.fc_final')
 
     fig, ax = plt.subplots(figsize=(2.5, 2.5))
 
     for data in data_loader:     
 
-        # preds, trues, uuid_list = [], [], []
         inputs = data[f'images_{image_type}'].to(device).float()
         
         with torch.set_grad_enabled(False):
             outputs = model(inputs)
 
         preds = outputs.detach().cpu().numpy()
-        
+        out_cams = [cam(class_idx=ii, normalized=False)[0].cpu().numpy() for ii in range(n_classes)]
+        out_cams = np.stack(out_cams, axis=1)
+
+        # range from -5 to 30
+        scaled_cams = (out_cams + 5) / 35
+        scaled_cams = np.clip(scaled_cams, 0.0, 1.0)
+        print(scaled_cams.shape)
+
         # Iterate through batch
-        for input_img, true, pred, uuid in zip(inputs, data['values'], preds, data['uuids']):
+        for input_img, true, pred, out_cam, uuid in zip(inputs, data['values'], preds, scaled_cams, data['uuids']):
             
-            if image_type == 'onh':
-                norm_img = input_img.cpu().numpy()[0] # first channel is grey, dataloader stacks them for resnet
-                scaled_img = (norm_img - norm_img.min()) / (norm_img.max() - norm_img.min())
-                bgr_img = cv2.cvtColor(scaled_img, cv2.COLOR_GRAY2BGR)
-            else:
-                norm_img = input_img.cpu().numpy()[0] # added [0]
-                scaled_img = (norm_img - norm_img.min()) / (norm_img.max() - norm_img.min())
-                # scaled_img = np.moveaxis(scaled_img, 0, -1) # removed
-                bgr_img = cv2.cvtColor(scaled_img, cv2.COLOR_GRAY2RGB) #cv2.COLOR_RGB2BGR
+            norm_img = input_img.cpu().numpy()
+            scaled_img = ((norm_img - norm_img.min()) / (norm_img.max() - norm_img.min()) * 255).astype(np.uint8)
+            scaled_img = np.moveaxis(scaled_img, 0, -1)
 
             for ii in range(n_classes):
 
-                target = [RawScoresMultiOutputTarget(ii)]    
-                grayscale_cam = cam(input_tensor=torch.unsqueeze(input_img, 0),
-                    targets=target, 
-                    aug_smooth=False, # if image_type == 'onh' else False, 
-                    eigen_smooth=True) # if image_type == 'onh' else False)
-                    
-                gradcam_img = show_cam_on_image(bgr_img, grayscale_cam[0, :], use_rgb=True, colormap=cv2.COLORMAP_CIVIDIS, image_weight=0.7)
+                overlay = overlay_mask(
+                    to_pil_image(scaled_img), 
+                    to_pil_image(resize(out_cam[ii], (8, 8), anti_aliasing=True), mode='F'), 
+                    alpha=0.5
+                    )
 
-                # if image_type == 'onh':
-                # gradcam_imgs = [gradcam_img]
-                # labels = ['']
-                # axess = [axes]
-                # else:
-                #     # print(gradcam_img.shape)
-                #     gradcam_img = resize(gradcam_img, (512*7, 512), anti_aliasing=True)
-                #     # print(gradcam_img.shape)
-                #     gradcam_imgs = np.split(gradcam_img, 7, axis=0)
-                #     labels = ['1', 'RNFL', 'GCL', 'HIHI', '5', '6', '7', '8']
-                #     axess = axes.flat
-
-                # for gradcam_layer, axx, label in zip(gradcam_imgs, axess, labels):
-                ax.imshow(gradcam_img)
+                ax.imshow(overlay)
                 ax.axis('off')
-                # ax.text(0.02, 0.02, '',
-                #         color='white', # fontsize='x-small',
-                #         horizontalalignment='left', 
-                #         verticalalignment='bottom', 
-                #         transform=ax.transAxes)
-
-                # axess[-1].text(0.5, -0.1, f'UUID:{uuid}\nTrue MD: {float(-1*true):.2f} dB\nPred MD: {float(-1*pred):.2f} dB',
-                #             horizontalalignment='center', 
-                #             verticalalignment='top', 
-                #             transform=axess[-1].transAxes)
-                ax.axis('off')
-
-                # if image_type == 'thick':
-                #     fig.suptitle(f'UUID: {uuid}\nTrue MD: {float(-1*true):.2f} dB\nPred MD: {float(-1*pred):.2f} dB', fontsize=16)
-                
+                 
                 fig.tight_layout()
                 fig.savefig(save_path / f'{uuid}_class{ii:02d}.png')
 
-                # for axx in axess:
                 ax.clear()
 
                 plt.close(fig)
-        
-        # break
 
 
-def compute_contrast(image_dir: pathlib.Path) -> None:
+def compute_contrast(image_dir: pathlib.Path, save_dir: pathlib.Path) -> None:
 
     img_paths = image_dir.glob('*.png')
     contrast_list = []
@@ -316,7 +272,6 @@ def compute_contrast(image_dir: pathlib.Path) -> None:
         # print(img_path)
 
         img = cv2.imread(str(img_path))
-        # Y = cv2.cvtColor(img, cv2.COLOR_BGR2YUV)[:,:,0]
 
         # compute min and max of Y
         min = np.min(img)
@@ -330,7 +285,7 @@ def compute_contrast(image_dir: pathlib.Path) -> None:
             print(i + 1)
 
     plt.hist(contrast_list, 20)
-    plt.savefig('hihi.png')
+    plt.savefig(save_dir / 'contrast.png')
 
 
 def _plot_truth_pred(ax, y_true, y_pred, title=None, text=None):
@@ -378,14 +333,6 @@ def plot_truth_prediction(y_true, y_pred):
         fig, ax = plt.subplots(figsize=(6, 6))
         _plot_truth_pred(ax, y_true, y_pred)
 
-    # fig.savefig(os.path.join(save_dir, 'true_predictions_plot_only_test.png'))
-    # fig.clf()
-    # plt.close()
     return fig
 
-
-if __name__ == '__main__':
-
-    img_dir = pathlib.Path(__file__).parent.parent.absolute() / 'inputs' / 'slices'
-    compute_contrast(img_dir)
 

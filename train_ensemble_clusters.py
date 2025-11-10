@@ -17,8 +17,9 @@ models = [
 '/storage/homefs/ds21n601/perimetry_project/resnet/runs/REGR_PRETRAIN_AUGMENT_20220807-164349__ep100_bs032_lr1.00E-04_clusters_THICK_ADAM_RESNET50_FINAL_PR',
 '/storage/homefs/ds21n601/perimetry_project/resnet/runs/REGR_PRETRAIN_AUGMENT_20220807-164449__ep100_bs032_lr1.00E-04_clusters_THICK_ADAM_RESNET50_FINAL_CC',
 '/storage/homefs/ds21n601/perimetry_project/resnet/runs/REGR_PRETRAIN_AUGMENT_20220807-164652__ep100_bs032_lr1.00E-04_clusters_THICK_ADAM_RESNET50_FINAL_RT',
-'/storage/homefs/ds21n601/perimetry_project/resnet/runs/REGR_PRETRAIN_AUGMENT_20220807-163657__ep100_bs032_lr1.00E-04_clusters_ONH_ADAM_RESNET50_FINAL'
+# '/storage/homefs/ds21n601/perimetry_project/resnet/runs/REGR_PRETRAIN_AUGMENT_20220807-163657__ep100_bs032_lr1.00E-04_clusters_ONH_ADAM_RESNET50_FINAL'
 ]
+with_onh = False
 
 # model_onh = '/storage/homefs/ds21n601/perimetry_project/resnet/runs/REGR_PRETRAIN_AUGMENT_20220805-123140__ep100_bs032_lr1.00E-02_clusters_ONH_ADAM_RESNET18_FINAL'
 
@@ -40,8 +41,6 @@ def get_data(dtype, clust_no):
     df_trues = df[[1]]
 
     return df_preds, df_trues
-
-with_onh = True
 
 current_time = datetime.now().strftime("%Y%m%d-%H%M%S")
 folder = f'{current_time}_ENSEMBLE_CLUSTER'
