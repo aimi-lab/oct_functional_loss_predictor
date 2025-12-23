@@ -1,0 +1,27 @@
+# Core scientific computing
+numpy
+pandas
+scipy
+
+# Machine Learning - scikit-learn and related
+scikit-learn
+imbalanced-learn
+xgboost
+
+# Deep Learning - PyTorch
+torch
+torchvision
+tensorboard
+
+# Computer Vision
+opencv-python
+scikit-image
+imgaug
+torchcam
+
+# Plotting and Visualization
+matplotlib
+seaborn
+
+# Data reading (Excel support)
+openpyxl
