@@ -164,8 +164,8 @@ class OCT2VFRegressor:
             # else:
                 # layers = [model.layer4, model.avgpool, model.fc_final]
             layers = [model.layer4]
-            # model.fc_final = nn.Linear(128 if self.args.model_name in ['resnet18', 'resnet34'] else 2048, self._num_classes)
-            model.fc_final = nn.Linear(512 if self.args.model_name in ['resnet18', 'resnet34'] else 2048, self._num_classes)
+            model.fc_final = nn.Linear(128 if self.args.model_name in ['resnet18', 'resnet34'] else 2048, self._num_classes)
+            # model.fc_final = nn.Linear(512 if self.args.model_name in ['resnet18', 'resnet34'] else 2048, self._num_classes)
 
         else:
             model = ONHMaculaModel()
@@ -183,7 +183,20 @@ class OCT2VFRegressor:
             print('Loading weights from already-trained model')
             state = torch.load(weights_from)
             state = {k.replace('module.', ''): v for k, v in state.items()} # if it was enclosed in nn.DataParallel
-            model.load_state_dict(state)
+            
+            # Check if the saved model has layer3 and layer4
+            has_layer3 = any('layer3' in k for k in state.keys())
+            has_layer4 = any('layer4' in k for k in state.keys())
+            
+            # If the saved model doesn't have layer3/layer4, replace them with Identity
+            if not has_layer3 or not has_layer4:
+                print(f'Saved model is missing layer3/layer4. Adjusting architecture to match...')
+                if not has_layer3:
+                    model.layer3 = nn.Identity()
+                if not has_layer4:
+                    model.layer4 = nn.Identity()
+                    
+            model.load_state_dict(state, strict=False)
 
         print(f'GPU devices: {torch.cuda.device_count()}')
         self.model = nn.DataParallel(model, device_ids=list(range(torch.cuda.device_count())))
