@@ -4,6 +4,7 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+        
         {
             "name": "Python: Current File",
             "type": "python",
@@ -11,9 +12,26 @@
             "program": "${file}",
             "args": [
                 "@resnet/configs/infer.example.txt"
-            ]
+            ],
             "console": "integratedTerminal",
             "justMyCode": true
+        },
+        {
+            "name": "Python: GradCAM Inference",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/resnet/oct2vf_cli.py",
+            "args": [
+                "infer",
+                "--model-dir",
+                "./resnet/runs/REGR_PRETRAIN_AUGMENT_20220804-123227__ep100_bs032_lr1.00E-02_MD_ONH_ADAM_RNFL_RESNET18",
+                "--out-dir",
+                "./grad_cam_experiments/exp_02",
+                "--grad-cam"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceFolder}"
         }
     ]
 }
