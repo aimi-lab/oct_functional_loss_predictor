@@ -13,6 +13,8 @@ def run_training(args):
 
 def run_inference(args):
     model_dir = pathlib.Path(args.model_dir)
+    out_dir = pathlib.Path(args.out_dir)
+
     with open(model_dir.joinpath('commandline_args.json'), 'r') as f:
         json_dict = json.load(f)
 
@@ -25,11 +27,12 @@ def run_inference(args):
 
     model_weights = model_dir.joinpath('regressor_bestR2.pth')
     inference_dir = model_dir.joinpath('inference_dir')
+    
 
     regr = OCT2VFRegressor(args)
     regr.load_datasets()
     regr.load_model(weights_from=model_weights)
-    regr.infer(regr.model, model_dir, gradcam=args.grad_cam) #changed from inference_dir
+    regr.infer(regr.model, out_dir, gradcam=args.grad_cam) #changed from inference_dir
 
 
 parser = argparse.ArgumentParser(
@@ -62,6 +65,7 @@ train_parser.add_argument('--adam', action="store_true")
 
 infer_parser = subparsers.add_parser('infer', help='Infer on a model') #, parents=[parent_parser])
 infer_parser.add_argument('--model-dir', action="store", type=str, required=True)
+infer_parser.add_argument('--out-dir', action="store", type=str, required=True)
 infer_parser.add_argument('--grad-cam', action="store_true")
 
 # train_parser.add_argument("--ensemble", action="store_true")
