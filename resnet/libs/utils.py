@@ -19,7 +19,7 @@ sns.set_context('poster')
 from torchcam.methods import CAM
 from torchcam.utils import overlay_mask
 
-from pytorch_grad_cam import GradCAM
+from pytorch_grad_cam import GradCAM, GradCAMPlusPlus
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 from pytorch_grad_cam.utils.image import show_cam_on_image
 
@@ -298,7 +298,8 @@ def make_output_images_grad_cam(model, dataloader, device, save_path, image_type
     model.eval()
 
     target_layers = [model.module.layer4]
-    cam = GradCAM(model=model, target_layers=target_layers, use_cuda=True)
+    # cam = GradCAM(model=model, target_layers=target_layers, use_cuda=True)
+    cam = GradCAMPlusPlus(model=model, target_layers=target_layers, use_cuda=True)
     fig, ax = plt.subplots(figsize=(2.5, 2.5))
 
     for data in dataloader:     
@@ -325,12 +326,13 @@ def make_output_images_grad_cam(model, dataloader, device, save_path, image_type
                                     targets=targets, 
                                     aug_smooth=False, 
                                     eigen_smooth=False)
+                
                 gradcam_img = show_cam_on_image(
                     bgr_img,
                     grayscale_cam[0, :],
                     use_rgb=False,
                     colormap=cv2.COLORMAP_JET,
-                    image_weight=0.7,
+                    image_weight=0.8,
                 )
 
                 ax.imshow(gradcam_img)
