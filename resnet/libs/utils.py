@@ -330,7 +330,7 @@ def make_output_images_grad_cam(model, dataloader, device, save_path, image_type
                     grayscale_cam[0, :],
                     use_rgb=False,
                     colormap=cv2.COLORMAP_JET,
-                    image_weight=0.85,
+                    image_weight=0.7,
                 )
 
                 ax.imshow(gradcam_img)
