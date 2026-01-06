@@ -328,7 +328,7 @@ def make_output_images_grad_cam(model, dataloader, device, save_path, image_type
                 gradcam_img = show_cam_on_image(
                     bgr_img,
                     grayscale_cam[0, :],
-                    use_rgb=True,
+                    use_rgb=False,
                     colormap=cv2.COLORMAP_JET,
                     image_weight=0.85,
                 )
