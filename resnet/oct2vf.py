@@ -84,7 +84,9 @@ class OCT2VFRegressor:
         os.makedirs(Path(__file__).parent.joinpath("weights"), exist_ok=True)
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu') 
 
-        if args.command == 'infer': return
+        if args.command == 'infer':
+            self.tb_path = Path(args.model_dir)
+            return
 
         path_str = "REGR_PRETRAIN_AUGMENT_{}__ep{:02d}_bs{:03d}_lr{:.2E}_{}_{}_{}_{}_IMPROVE_RT".format(
         # path_str = "REGR_PRETRAIN_AUGMENT_{}__ep{:02d}_bs{:03d}_lr{:.2E}_{}_{}_SGD_INCREASED61WITH49_GRAYIMGS_FROZEN-MORE_FLIP-OD_FUSED_NO-LEAKY_WEIGHTED".format(
@@ -344,25 +346,22 @@ class OCT2VFRegressor:
 
         save_dir.mkdir(exist_ok=True)
         OCTDataset.augment_image = False
-        u.eval_model(model, self.testloader, self.device, save_dir, self.args.images, dtype='test')
-        u.eval_model(model, self.valloader, self.device, save_dir, self.args.images, dtype='validation')
-        u.eval_model(model, self.trainloader, self.device, save_dir, self.args.images, dtype='train')
+        # u.eval_model(model, self.testloader, self.device, save_dir, self.args.images, dtype='test')
+        # u.eval_model(model, self.valloader, self.device, save_dir, self.args.images, dtype='validation')
+        # u.eval_model(model, self.trainloader, self.device, save_dir, self.args.images, dtype='train')
 
         if gradcam:
-            gradcam_dir = save_dir.joinpath('gradcam')
+            model.eval()
+            # gradcam_dir = save_dir.joinpath('gradcam_torchcam')
+            # gradcam_dir.mkdir(exist_ok=True)
+
+            # u.make_output_images_torchcam(model, self.testloader, self.device, gradcam_dir, image_type=self.args.images, n_classes=self._num_classes)
+
+            gradcam_dir = save_dir.joinpath('gradcam_gradcam')
             gradcam_dir.mkdir(exist_ok=True)
-            u.make_output_images(model, self.testloader, self.device, gradcam_dir, self.args.images, self._num_classes)
 
-        # GradCAM
-        # csv_paths_gradcam = [data_path.joinpath(f'annotation_30_percent_export.csv')]
-        # gradcamset = OCTSlicesDataset('test', csv_paths_gradcam, slices_path, TARGET, transform_image=t_test)
-        # testloader = torch.utils.data.DataLoader(gradcamset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0)
+            u.make_output_images_grad_cam(model, self.testloader, self.device, gradcam_dir,image_type=self.args.images, n_classes=self._num_classes)
 
-        # pathh = Path(FLAGS.model_path) if FLAGS.model_path else tb_path
-        # with open(pathh / 'output_thresholds.json') as json_file:
-        #     threshold_json = json.load(json_file)
-        # for k, v in threshold_json.items():
-        #     threshold_json[k] = float(v)
             
 
 

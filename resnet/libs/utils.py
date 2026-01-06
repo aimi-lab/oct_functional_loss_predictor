@@ -19,6 +19,10 @@ sns.set_context('poster')
 from torchcam.methods import CAM
 from torchcam.utils import overlay_mask
 
+from pytorch_grad_cam import GradCAM
+from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
+from pytorch_grad_cam.utils.image import show_cam_on_image
+
 
 class RawScoresMultiOutputTarget:
     def __init__(self, out_number):
@@ -211,8 +215,32 @@ def eval_model(model, testset, device, save_path, image_type, dtype='test'):
         fig.clf()
         plt.close()
 
+def make_output_images(model, data_loader, device, save_path, backend = 'torchcam', **kwargs):
 
-def make_output_images(model, data_loader, device, save_path, image_type, n_classes):
+    if backend == 'torchcam':
+        return make_output_images_torchcam(
+            model=model,
+            data_loader=data_loader,
+            device=device,
+            save_path=save_path,
+            **kwargs
+        )
+    elif backend == 'grad-cam':
+        return make_output_images_grad_cam(
+            model=model,
+            dataloader=data_loader,
+            device=device,
+            save_path=save_path,
+            **kwargs
+        )
+    else:
+        raise ValueError('Invalid make output image backend')
+
+
+def make_output_images_torchcam(model, data_loader, device, save_path, image_type, n_classes):
+    """
+    Generation of grad cam images using the torchcam package.
+    """
     
     model.eval()
 
@@ -247,13 +275,67 @@ def make_output_images(model, data_loader, device, save_path, image_type, n_clas
 
                 overlay = overlay_mask(
                     to_pil_image(scaled_img), 
-                    to_pil_image(resize(out_cam[ii], (8, 8), anti_aliasing=True), mode='F'), 
+                    to_pil_image(resize(out_cam[ii], (8, 8), anti_aliasing=True), mode='F'),
+                    colormap='rainbow_r',
                     alpha=0.5
                     )
 
                 ax.imshow(overlay)
                 ax.axis('off')
                  
+                fig.tight_layout()
+                fig.savefig(save_path / f'{uuid}_class{ii:02d}.png')
+
+                ax.clear()
+
+                plt.close(fig)
+
+def make_output_images_grad_cam(model, dataloader, device, save_path, image_type, n_classes,):
+    """
+    Generation of grad cam images using the grad-cam package.
+    """
+
+    model.eval()
+
+    target_layers = [model.module.layer4]
+    cam = GradCAM(model=model, target_layers=target_layers, use_cuda=True)
+    fig, ax = plt.subplots(figsize=(2.5, 2.5))
+
+    for data in dataloader:     
+
+        inputs = data[f'images_{image_type}'].to(device).float()
+
+        with torch.set_grad_enabled(False):
+            outputs = model(inputs)
+
+        preds = outputs.detach().cpu().numpy()
+        outputs = outputs.sigmoid().detach().cpu().numpy()
+
+        # Iterate through batch
+        for input_img, true, pred, uuid in zip(inputs, data['values'], preds, data['uuids']):
+
+            norm_img = input_img.cpu().numpy()[0] # first channel is grey, dataloader stacks them for resnet
+            scaled_img = (norm_img - norm_img.min()) / (norm_img.max() - norm_img.min())
+            bgr_img = cv2.cvtColor(scaled_img, cv2.COLOR_GRAY2BGR)
+
+            for ii in range(n_classes):
+
+                targets = [ClassifierOutputTarget(ii)]    
+                grayscale_cam = cam(input_tensor=torch.unsqueeze(input_img, 0),
+                                    targets=targets, 
+                                    aug_smooth=False, 
+                                    eigen_smooth=False)
+                gradcam_img = show_cam_on_image(
+                    bgr_img,
+                    grayscale_cam[0, :],
+                    use_rgb=True,
+                    colormap=cv2.COLORMAP_JET,
+                    image_weight=0.85,
+                )
+
+                ax.imshow(gradcam_img)
+                ax.axis('off')
+
                 fig.tight_layout()
                 fig.savefig(save_path / f'{uuid}_class{ii:02d}.png')
 
@@ -334,5 +416,3 @@ def plot_truth_prediction(y_true, y_pred):
         _plot_truth_pred(ax, y_true, y_pred)
 
     return fig
-
-
