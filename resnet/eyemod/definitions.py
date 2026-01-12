@@ -28,27 +28,27 @@ class Split(Enum):
     def from_num(cls, num: int):
         return cls(num)
     
+
 class Laterality(Enum):
-    LEFT = 0
-    RIGHT = 1
+    L = "left"
+    R = "right"
+    U = "unknown"
 
-    @staticmethod
-    def from_string(s: str):
-        left_strings = ["left", "l", "0", "lft", "os"]
-        right_strings = ["right", "r", "1", "rght", "od"]
+    @classmethod
+    def from_str(cls, text: str):
+        text = text.lower().strip()
+        if text in ["left", "l", "os"]:
+            return cls("left")
+        elif text in ["right", "r", "od"]:
+            return cls("right")
+        else:
+            return cls("unknown")
 
-        if s.lower() in left_strings:
-            return Laterality.LEFT
-        elif s.lower() in right_strings:
-            return Laterality.RIGHT
+    @classmethod
+    def from_int(cls, num: int):
+        if num == 0:
+            return cls("left")
+        elif num == 1:
+            return cls("right")
         else:
-            raise ValueError(f"Unknown laterality: {s}")
-    
-    @staticmethod
-    def from_int(i: int):
-        if i == 0:
-            return Laterality.LEFT
-        elif i == 1:
-            return Laterality.RIGHT
-        else:
-            raise ValueError(f"Unknown laterality: {i}")
+            return cls("unknown")
