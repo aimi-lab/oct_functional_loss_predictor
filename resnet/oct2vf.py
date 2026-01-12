@@ -17,6 +17,9 @@ import copy
 import json
 from libs import resnet
 
+import eyemod.dl.data.image2vf as image2vf
+
+
 RNDM = 91
 torch.manual_seed(RNDM)
 DIR_UBELIX = Path(__file__).parent.parent.joinpath("inputs")
@@ -78,7 +81,7 @@ class OCT2VFRegressor:
         self.slices_path = self.data_path.joinpath(DIR_SLICES)
 
         self.current_time = datetime.now().strftime("%Y%m%d-%H%M%S")
-        
+
         self._num_classes = 1 if args.target == 'MD' else 10
         self.args = args
         os.makedirs(Path(__file__).parent.joinpath("weights"), exist_ok=True)
@@ -105,7 +108,6 @@ class OCT2VFRegressor:
 
         with open(self.tb_path / 'commandline_args.json', 'w') as f:
             json.dump(args.__dict__, f, indent=2)
-
 
     def load_datasets(self):
 
@@ -148,10 +150,40 @@ class OCT2VFRegressor:
         print(self.trainset_size, valset_size, testset_size)
 
         # pd.DataFrame(
-        #     zip(testvalset.df.iloc[testset_indices].sum(), testvalset.df.iloc[valset_indices].sum()), 
-        #     columns=['test', 'val'], 
+        #     zip(testvalset.df.iloc[testset_indices].sum(), testvalset.df.iloc[valset_indices].sum()),
+        #     columns=['test', 'val'],
         #     index=testvalset.df.columns
         # ).to_csv(self.tb_path / 'val_test_distribution.csv')
+
+    def load_dataset_image2vf(self):
+
+        if self.args.resize:
+            t = transforms.Compose([
+                Resize(self.args.resize),
+                transforms.ToTensor(),  
+                transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
+            ]) 
+        else:
+            t = transforms.Compose([
+                transforms.ToTensor(),  
+                transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
+            ])
+
+        root_dir = Path('/storage/homefs/ms22q288/projects/struc2func/in/image2vf')
+
+        valset = image2vf.SingleTimepoint(
+            root=root_dir,
+            split=[4],
+            transform=t,
+            second_only=True,
+            data_file="data_onh_oct.csv",
+            selection_file=f"iltered/temporal_pairs_sequential_filtered_t-5.csv",
+            targets='md'
+        )
+        self.trainloader = None
+        self.valloader = torch.utils.data.DataLoader(valset, batch_size=self.args.batch_size, shuffle=True, num_workers=0)
+        self.testloader = torch.utils.data.DataLoader(valset, batch_size=self.args.batch_size, shuffle=True, num_workers=0)
+
 
     def load_model(self, weights_from=None):
 
@@ -159,12 +191,12 @@ class OCT2VFRegressor:
             model = getattr(resnet, self.args.model_name)(pretrained=True, num_classes=self._num_classes)
 
             # if self.args.model_name in ['resnet34']: # ['resnet18', 'resnet34']:
-                # model.layer3 = nn.BatchNorm2d(128 if self.args.model_name in ['resnet18', 'resnet34'] else 512)
+            # model.layer3 = nn.BatchNorm2d(128 if self.args.model_name in ['resnet18', 'resnet34'] else 512)
             # # model.layer3 = nn.Identity()
-                # model.layer4 = nn.Identity()
+            # model.layer4 = nn.Identity()
             #     layers = [model.layer2, model.layer3, model.avgpool, model.fc_final]
             # else:
-                # layers = [model.layer4, model.avgpool, model.fc_final]
+            # layers = [model.layer4, model.avgpool, model.fc_final]
             layers = [model.layer4]
             model.fc_final = nn.Linear(128 if self.args.model_name in ['resnet18', 'resnet34'] else 2048, self._num_classes)
             # model.fc_final = nn.Linear(512 if self.args.model_name in ['resnet18', 'resnet34'] else 2048, self._num_classes)
@@ -185,11 +217,11 @@ class OCT2VFRegressor:
             print('Loading weights from already-trained model')
             state = torch.load(weights_from)
             state = {k.replace('module.', ''): v for k, v in state.items()} # if it was enclosed in nn.DataParallel
-            
+
             # Check if the saved model has layer3 and layer4
             has_layer3 = any('layer3' in k for k in state.keys())
             has_layer4 = any('layer4' in k for k in state.keys())
-            
+
             # If the saved model doesn't have layer3/layer4, replace them with Identity
             if not has_layer3 or not has_layer4:
                 print(f'Saved model is missing layer3/layer4. Adjusting architecture to match...')
@@ -197,7 +229,7 @@ class OCT2VFRegressor:
                     model.layer3 = nn.Identity()
                 if not has_layer4:
                     model.layer4 = nn.Identity()
-                    
+
             model.load_state_dict(state, strict=False)
 
         print(f'GPU devices: {torch.cuda.device_count()}')
@@ -236,10 +268,10 @@ class OCT2VFRegressor:
         # scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max')#, min_lr=self.args.learning_rate/10)
 
         criterion = nn.L1Loss() 
-        # criterion = nn.MSELoss() 
+        # criterion = nn.MSELoss()
 
         best_r2 = 0
-        
+
         for epoch in range(self.args.epochs):
 
             for phase in ['train', 'test', 'validation']:
@@ -329,10 +361,10 @@ class OCT2VFRegressor:
             # scheduler.step(epoch_r2)
             scheduler.step(epoch_r2)
             print(f'Epoch {epoch + 1} finished')
-                
+
             # torch.save(self.model.state_dict(),
             #         Path(__file__).parents[0].joinpath('weights', f'detector_{self.current_time}_e{epoch + 1}.pth'))
-    
+
         # Save best models and create symlink in working directories
         best_r2_model = Path(__file__).parents[0].joinpath(
             'weights', f'regressor_{self.current_time}_bestR2.pth'
@@ -361,8 +393,6 @@ class OCT2VFRegressor:
             gradcam_dir.mkdir(exist_ok=True)
 
             u.make_output_images_grad_cam(model, self.testloader, self.device, gradcam_dir,image_type=self.args.images, n_classes=self._num_classes)
-
-            
 
 
 if __name__ == '__main__':
