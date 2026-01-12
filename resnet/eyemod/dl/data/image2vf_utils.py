@@ -1,6 +1,6 @@
 from pathlib import Path
 from datetime import date
-from typing import Iterable, Callable
+from typing import Iterable, Callable, List, Tuple, Union
 import io
 
 import pandas as pd
@@ -14,7 +14,7 @@ from torchvision.transforms.v2 import ToDtype
 
 # Pair data functions
 
-def _select_split(df: pd.DataFrame, split: int | list[int]) -> pd.DataFrame:
+def _select_split(df: pd.DataFrame, split: Union[int, List[int]]) -> pd.DataFrame:
     assert 'split' in df, "Dataframe is missing the column 'split'"
     if not isinstance(split, Iterable):
         split = [split]    
@@ -33,14 +33,14 @@ def _compute_relative_times(df_pairs: pd.DataFrame):
     df_pairs['time_second'] = (second - first).dt.days
     return df_pairs
 
-def _get_samples_from_pairs(df_pairs: pd.DataFrame, index_cols: list[str]) -> pd.DataFrame:
+def _get_samples_from_pairs(df_pairs: pd.DataFrame, index_cols: List[str]) -> pd.DataFrame:
     assert len(index_cols) == 3, "Expected 3 index columns"
     samples = df_pairs.melt(id_vars=index_cols[:2], value_name=index_cols[2])
     samples = samples[index_cols]
     samples = samples.drop_duplicates()
     return samples
 
-def _get_pair(df_pairs: pd.DataFrame, index: int) -> tuple:
+def _get_pair(df_pairs: pd.DataFrame, index: int) -> Tuple:
 
     pair = df_pairs.iloc[index]
     eye = list(pair[['heyex_id_anon', 'laterality']])
@@ -58,7 +58,7 @@ def _get_image_times(df_pairs: pd.DataFrame, index: int):
 
 # Sample data functions
 
-def _remove_unused_samples(df_data: pd.DataFrame, df_samples: pd.DataFrame, index_cols: list[str]) -> pd.DataFrame:
+def _remove_unused_samples(df_data: pd.DataFrame, df_samples: pd.DataFrame, index_cols: List[str]) -> pd.DataFrame:
     assert list(df_data.index.names) == index_cols, f"Index columns mismatch: {df_data.index.names} != {index_cols}"
 
     df_data = df_data.merge(df_samples, how='inner', left_index=True, right_on=index_cols)
@@ -83,7 +83,7 @@ def _infer_tar_dir_name(data_filename: str) -> str:
     dir_name = base_name.replace('data_', '')
     return dir_name
 
-def _read_datafiles(root: Path, filepaths: list[str], index_cols: list[str]) -> list[pd.DataFrame]:
+def _read_datafiles(root: Path, filepaths: List[str], index_cols: List[str]) -> List[pd.DataFrame]:
         
     assert isinstance(filepaths, Iterable), "Please provide a list of filepaths."
     root = Path(root)
@@ -180,7 +180,7 @@ def _read_from_tar(archive_path: Path, offset: int, size: int) -> io.BytesIO:
         data = f.read(size)
     return io.BytesIO(data)
 
-def _load_tiff(file: str | io.BytesIO) -> torch.Tensor:
+def _load_tiff(file: Union[str, io.BytesIO]) -> torch.Tensor:
     img = tifffile.imread(file)
     img = torch.from_numpy(img)
     img = ToDtype(torch.float32, scale=True)(img)
@@ -190,7 +190,7 @@ def _load_tiff(file: str | io.BytesIO) -> torch.Tensor:
     img = img.clone()
     return img
 
-def _load_array(file: str | io.BytesIO) -> torch.Tensor:
+def _load_array(file: Union[str, io.BytesIO]) -> torch.Tensor:
     arr = np.load(file)
     arr = torch.from_numpy(arr)
     arr = ToDtype(torch.float32, scale=False)(arr)

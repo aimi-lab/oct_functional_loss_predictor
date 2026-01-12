@@ -1,3 +1,4 @@
+from __future__ import annotations 
 from pathlib import Path
 from typing import Iterable, Callable, Mapping, NamedTuple
 from functools import partial
@@ -8,8 +9,8 @@ import numpy as np
 
 import torch
 
-from aimitools.visual_field import VisualField
-from aimitools.visual_field.filter import Filter
+from eyemod.visual_fields import VisualField
+from eyemod.visual_fields.filter import Filter
 
 from eyemod.data.glaucoma_stage import GlaucomaStage
 from eyemod.dl.data.base_dataset import BaseDataset
@@ -393,6 +394,7 @@ class SingleTimepoint(Img2VfBase, SingleTimepointMixin):
         img = self._apply_image_transforms(img)
 
         img = img[0][0]
+        img = img.expand(3, -1, -1)
 
         targets = self._get_targets(visit_indices)
         targets = self._apply_target_transforms(targets)
@@ -401,9 +403,9 @@ class SingleTimepoint(Img2VfBase, SingleTimepointMixin):
 
         meta = self._get_single_timepoint_meta(index, visit_indices)
 
-        img_id = f'{meta['heyex_id_anon']}_{meta['laterality']}_{meta['acquisition_date']}'
+        img_id = f"{meta['heyex_id_anon']}_{meta['laterality']}_{meta['acquisition_date']}"
 
-        return {'images_thick': img, 'images_onh': img, 'values': targets, 'uuids': img_id,} #, 'center': center}
+        return {'images_thick': img, 'images_onh': img, 'values': targets, 'uuids': img_id,} 
         return sample
         return img, targets, meta
 
