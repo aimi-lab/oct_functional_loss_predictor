@@ -302,6 +302,7 @@ def make_output_images_grad_cam(model, dataloader, device, save_path, image_type
     cam = GradCAMPlusPlus(model=model, target_layers=target_layers, use_cuda=True)
     fig, ax = plt.subplots(figsize=(2.5, 2.5))
 
+    counter = 0
     for data in dataloader:     
 
         inputs = data[f'images_{image_type}'].to(device).float()
@@ -339,8 +340,8 @@ def make_output_images_grad_cam(model, dataloader, device, save_path, image_type
                 ax.axis('off')
 
                 fig.tight_layout()
-                fig.savefig(save_path / f'{uuid}_class{ii:02d}.png')
-
+                fig.savefig(save_path / f'{counter}_{uuid}_class{ii:02d}.png')
+                counter += 1
                 ax.clear()
 
                 plt.close(fig)

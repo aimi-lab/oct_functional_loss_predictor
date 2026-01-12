@@ -2,6 +2,7 @@ from multiprocessing.sharedctypes import Value
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torchvision.transforms import v2
 from libs.data_retriever import OCTDataset, Resize
 import torchvision.transforms as transforms
 from sklearn.model_selection import StratifiedGroupKFold
@@ -159,17 +160,16 @@ class OCT2VFRegressor:
 
         if self.args.resize:
             t = transforms.Compose([
-                Resize(self.args.resize),
-                transforms.ToTensor(),  
-                transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
+                v2.Resize((self.args.resize, self.args.resize)),
+                transforms.Normalize([0.5,], [0.5,])
             ]) 
         else:
             t = transforms.Compose([
                 transforms.ToTensor(),  
-                transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
+                transforms.Normalize([0.5,], [0.5,])
             ])
 
-        root_dir = Path('/storage/homefs/ms22q288/projects/struc2func/in/image2vf')
+        root_dir = Path('/storage/homefs/ms22q288/projects/struc2func/in/data/image2vf')
 
         valset = image2vf.SingleTimepoint(
             root=root_dir,
@@ -177,12 +177,12 @@ class OCT2VFRegressor:
             transform=t,
             second_only=True,
             data_file="data_onh_oct.csv",
-            selection_file=f"iltered/temporal_pairs_sequential_filtered_t-5.csv",
+            selection_file=f"filtered/temporal_pairs_sequential_filtered_t-5.csv",
             targets='md'
         )
         self.trainloader = None
-        self.valloader = torch.utils.data.DataLoader(valset, batch_size=self.args.batch_size, shuffle=True, num_workers=0)
-        self.testloader = torch.utils.data.DataLoader(valset, batch_size=self.args.batch_size, shuffle=True, num_workers=0)
+        self.valloader = torch.utils.data.DataLoader(valset, batch_size=self.args.batch_size, shuffle=False, num_workers=0)
+        self.testloader = torch.utils.data.DataLoader(valset, batch_size=self.args.batch_size, shuffle=False, num_workers=0)
 
 
     def load_model(self, weights_from=None):
@@ -397,4 +397,4 @@ class OCT2VFRegressor:
 
 if __name__ == '__main__':
     ONHMaculaModel()
-    print('ciao')
+    print('ciao') 

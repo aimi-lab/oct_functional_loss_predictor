@@ -30,7 +30,7 @@ def run_inference(args):
     
 
     regr = OCT2VFRegressor(args)
-    regr.load_datasets()
+    regr.load_dataset_image2vf()
     regr.load_model(weights_from=model_weights)
     regr.infer(regr.model, out_dir, gradcam=args.grad_cam) #changed from inference_dir
 
