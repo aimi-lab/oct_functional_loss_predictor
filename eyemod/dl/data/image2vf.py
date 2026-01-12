@@ -401,6 +401,10 @@ class SingleTimepoint(Img2VfBase, SingleTimepointMixin):
 
         meta = self._get_single_timepoint_meta(index, visit_indices)
 
+        img_id = f'{meta['heyex_id_anon']}_{meta['laterality']}_{meta['acquisition_date']}'
+
+        return {'images_thick': img, 'images_onh': img, 'values': targets, 'uuids': img_id,} #, 'center': center}
+        return sample
         return img, targets, meta
 
     @classmethod
